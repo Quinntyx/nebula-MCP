@@ -48,28 +48,28 @@ There is no base-URL override. The server always talks to `https://api.utdnebula
 
 | Tool | Toolset | Arguments (all bounded) |
 | --- | --- | --- |
-| `course_search` | academics | `subject_prefix` (required), `course_number`, `catalog_year`, `school`, `class_level`, `limit` 1–25 (default 10), `cursor` |
+| `course_search` | academics | `subject_prefix` (required), `course_number`, `catalog_year`, `school`, `class_level`, `limit` 1–20 (default 10), `cursor` |
 | `course_get` | academics | `course_id` (24-hex upstream id) |
 | `section_search` | academics | paired `subject_prefix` + `course_number` and/or paired `first_name` + `last_name`, `term`, `limit` 1–25, `cursor` |
 | `section_get` | academics | `section_id` |
-| `professor_search` | academics | `first_name` and/or `last_name`, `limit` 1–25, `cursor` |
+| `professor_search` | academics | `first_name` and/or `last_name`, `limit` 1–20 (default 10), `cursor` |
 | `professor_get` | academics | `professor_id` |
 | `grades_get` | academics | one of `course_id` / `professor_id` / `section_id`, or filters `subject_prefix`+`course_number`(+`section_number`), `first_name`+`last_name`; `by` = `overall` (default) \| `term` \| `term_section_type`; `terms`; `limit` 1–40 (default 12); `cursor` |
 | `academic_calendar_get` | academics | `term` (canonical `YY[SUF]`, four-digit, or `Fall 2026`); omitted means the upstream "current" calendar |
-| `club_search` | clubs | `query` (2–80 chars after wildcard removal), `limit` 1–25, `cursor` |
+| `club_search` | clubs | `query` (1–120 chars; at least two letters/digits after wildcard removal), `limit` 1–15 (default 5), `cursor` |
 | `club_get` | clubs | `club_id` |
 | `campus_events_on_date` | events | `date` (`YYYY-MM-DD`, required), `building`, `room` (requires `building`), `query`, `limit` 1–50, `cursor` |
 
 Semantics worth knowing before you rely on them:
 
-- **Exact matching only.** Subject prefixes are uppercased and trimmed; everything else must match upstream exactly. There is no fuzzy matching, automatic title-casing, or retry with altered casing.
+- **Exact academic matching.** Subject prefixes are uppercased; text filters are trimmed and whitespace is normalized. Academic filters are case-sensitive with no fuzzy matching or capitalization retries. Club keyword search is fuzzy.
 - **No catalog guessing.** `course_get` and `professor_get` take ids only. The server never picks a "newest catalog" row for you, and never resolves a name to an id behind your back.
-- **One upstream page per call.** Searches fetch a single upstream page at the cursor's offset. There are no hidden multi-page fallbacks, retries with widened filters, or automatic follow-up requests.
-- **Honest pagination.** `has_more` is `true` when the response proves unreturned rows exist, `null` when a non-empty page cannot prove exhaustion, and `false` only after an empty page. A non-empty page always returns a `next_cursor`; a terminal empty call may be needed.
+- **Bounded requests.** Course/professor searches fetch one upstream page at the cursor offset. Trends sections, clubs, events and per-term grades fetch one complete response (within the byte limit) and page locally. No hidden multi-page fallbacks or widened filters. `section_get` explicitly fetches instructors in a second request.
+- **Honest pagination.** Course/professor searches use `has_more: null` when exhaustion is unknown, and `false` only after an empty upstream page; a terminal empty call may be needed. Locally paged datasets know when their last page is reached. Every partial nonempty page has a continuation cursor.
 - **Grade buckets are raw counts.** Exactly 14 buckets, in Trends order: `A+, A, A-, B+, B, B-, C+, C, C-, D+, D, D-, F, W`. An all-zero distribution means no recorded observations, not a missing entity. **No GPA, no ranking.**
 - **Calendars are not inferred.** Omitting `term` returns whatever the upstream API marks as current; the server never derives the current term from the clock.
 
-Detailed argument tables, response shapes, and examples live in [docs/tools.md](docs/tools.md). The accepted design contract is [docs/design.md](docs/design.md).
+Detailed arguments and examples live in [docs/tools.md](docs/tools.md). See the [design contract](docs/design.md) and [review/validation record](docs/validation.md).
 
 ## Result shape
 
@@ -107,7 +107,9 @@ Codes: `INVALID_ARGUMENT`, `NOT_FOUND`, `AUTH_MISSING`, `AUTH_REJECTED`, `RATE_L
 
 Lists page with opaque `next_cursor` values. Cursors are versioned base64url JSON that bind the tool and a hash of the normalized filters; changing a filter or switching tools invalidates the cursor. They carry pagination state only, never credentials or URLs.
 
-Result text is capped at a hard byte budget. When rows must be trimmed, `has_more` and `next_cursor` describe the rows actually emitted, so continuation never skips or repeats a row.
+The complete MCP result, including metadata and serialization overhead, is capped at **12,000 UTF-8 bytes**; list data targets **6,000 bytes**. Truncation is disclosed in data/metadata. Cursors advance by rows actually emitted, never by discarded rows. Upstream updates can still cause paging drift. A row/detail that cannot fit returns `RESPONSE_TOO_LARGE`, not an unusable empty success.
+
+Tool descriptions are at most 160 characters, and the server exposes only selected toolsets. Client-side deferred discovery is supported naturally; this repository does not install or configure clients.
 
 ## Limits and safety
 
@@ -124,15 +126,15 @@ Result text is capped at a hard byte budget. When rows must be trimmed, `has_mor
 npm ci
 npm run typecheck   # tsc --noEmit
 npm run build       # emit dist/
-npm test            # build, then node --test dist/test
+npm test            # build, then node --test dist/test/*.test.js
 npm run check       # typecheck + test
 ```
 
-Tests are fully offline: synthetic fixtures model upstream envelopes, and a real stdio subprocess exercises `initialize`, `tools/list`, missing-key handling, and toolset selection. No API key, network access, or captured production data is involved. There is no live smoke test in the required path; see [AGENTS.md](AGENTS.md) for contribution rules and commit conventions.
+Tests are fully offline: synthetic fixtures model upstream envelopes; a real stdio subprocess and the official SDK client exercise discovery, strict schemas, argument validation, missing-key handling, toolset selection, reflected-secret redaction, and output budgets. No API key, network access, or captured production data is involved. There is no live smoke test in the required path; see [AGENTS.md](AGENTS.md) for contribution rules and commit conventions.
 
 ## Data notes and limitations
 
-- Grade aggregates are keyed by instructor name upstream, so homonymous instructors merge. Course filters resolve through the upstream internal course number, so cross-listed or renumbered courses can combine.
+- Name-filtered grade aggregates merge homonymous instructors; ID-based aggregates scope to the supplied entity. Course filters resolve through the upstream internal course number, so cross-listed or renumbered courses can combine.
 - Section and professor results reflect the upstream index at fetch time; there is no live registration, seat-count, or waitlist data.
 - Campus events come from the Comet Calendar index. An empty day means no indexed events, not proof that nothing happens on campus. Listed rooms are event locations, not verified bookings.
 - Club results are a fuzzy index; absence from it does not mean an organization does not exist. Contact links are returned as data and never opened automatically.

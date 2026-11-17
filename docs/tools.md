@@ -1,136 +1,114 @@
 # Tool reference
 
-Every tool is read-only, returns one minified JSON text block, and accepts strictly bounded arguments. Unknown properties are rejected before any network call. See [design.md](design.md) for the accepted contract and [../README.md](../README.md) for configuration and limits.
+All tools are read-only. They publish strict JSON schemas and reject unknown properties, invalid types, whitespace-only text, and invalid argument combinations before network access. Results are single JSON text blocks; large values/collections disclose truncation. See [design.md](design.md) and [README](../README.md).
 
-Common conventions:
+## Common conventions
 
-- `limit` is a row count for this server, never an upstream page size. Upstream search pages are fixed by the API's own `LIMIT`; this server sends `offset` only and never invents `limit`.
-- `cursor` is opaque. Pass `next_cursor` back verbatim; it is bound to the tool and a hash of the normalized filters, so changing a filter requires starting over.
-- `has_more` is `true` when unreturned rows are known to exist, `null` when a non-empty page cannot prove exhaustion, and `false` only after an empty page.
-- `meta.requests` counts upstream responses consumed by the call; `meta.notes` explains provenance, freshness, and truncation.
+- `limit` controls rows returned by this server, not upstream page size. No invented upstream `limit` is sent.
+- `cursor` is at most 512 characters. Pass `next_cursor` unchanged with the same tool and filters; changing the limit is allowed.
+- Course/professor searches read one API page using raw `offset`. Their `has_more` is `true` if that page has unreturned rows, `null` if exhaustion is unknown, and `false` only after an empty page. A terminal empty call may be needed.
+- Trends sections, clubs, term grades, and events fetch one complete response within a 2 MiB ceiling and page locally; their `has_more` is boolean. Continuations refetch rather than retain an unbounded cache. Upstream changes can cause drift.
+- All partial nonempty pages provide a cursor; no row is skipped merely to meet an output budget. An oversized first row produces a bounded error rather than an empty, unusable page.
+- Lists target 6,000 bytes of data. The complete MCP result is limited to 12,000 UTF-8 bytes, including metadata, errors, and JSON escaping. Further field/collection reductions are marked with `truncated` in data or metadata; clipped text ends in an ellipsis.
+- `meta.requests` reports attempts returned by the repository; retries are included for successful calls. Failed optional lookups may not be counted. `meta.notes` explains freshness and completeness.
+- Academic text filters are exact/case-sensitive after trimming and whitespace normalization; prefixes are uppercased. Clubs alone support fuzzy keyword search. No casing retries, catalog guessing, or broad fallback scans.
 
 ## course_search — academics
 
-| Argument | Required | Type | Notes |
-| --- | --- | --- | --- |
-| `subject_prefix` | yes | string 1–8 | Trimmed and uppercased; `[A-Z0-9 &-]` only |
-| `course_number` | no | string 1–12 | Exact, case-sensitive |
-| `catalog_year` | no | string 1–24 | Exact, e.g. `2024-2025` |
-| `school` | no | string 1–60 | Exact |
-| `class_level` | no | string 1–40 | Exact, e.g. `Undergraduate` |
-| `limit` | no | 1–25, default 10 | Rows returned locally |
-| `cursor` | no | string ≤512 | Continuation token |
+Required: `subject_prefix` (1–8 characters; letters/digits, spaces, `&`, `-`).
 
-Route: `GET /course?subject_prefix=…&offset=…`. Result rows: `id`, `code`, `title`, `credit_hours`, `catalog_year`.
+Optional: `course_number` (1–12), `catalog_year` (1–24, passed unchanged apart from whitespace), `school` (1–60), `class_level` (1–40), `limit` (default 10, max 20), `cursor`.
 
-`has_more` is `null` on a non-empty page because the API exposes no totals and a short page does not prove exhaustion. A terminal empty page returns `has_more: false`.
+Route: `GET /course` with exact filters and `offset`. Rows: `id`, `code`, `title`, `credit_hours`, `catalog_year`. Different catalog years can produce different IDs for the same code.
+
+Example: `{"subject_prefix":"CS","course_number":"1336","limit":5}`.
 
 ## course_get — academics
 
-| Argument | Required | Type |
-| --- | --- | --- |
-| `course_id` | yes | 24-hex upstream id |
+Required: `course_id` (24 hexadecimal characters).
 
-Route: `GET /course/{id}` plus a bounded section-count lookup. Result: catalog metadata, `description`, a bounded prerequisite/co-requisite tree, and `section_count` with a small sample of section ids. Section records are counted, not expanded.
+Route: `GET /course/{id}`. Returns catalog metadata, description, enrollment requirements, bounded prerequisite/corequisite trees and section count from that same response. It does not expand sections or silently choose a newer catalog record.
 
 ## section_search — academics
 
-| Argument | Required | Type | Notes |
-| --- | --- | --- | --- |
-| `subject_prefix` + `course_number` | pair | strings | Exact course pair |
-| `first_name` + `last_name` | pair | strings | Exact professor pair |
-| `term` | no | string | `YY[SUF]`, four-digit, or `Fall 2026`; canonicalised |
-| `limit` | no | 1–25, default 10 | |
-| `cursor` | no | string ≤512 | |
+Provide an exact course pair (`subject_prefix` 1–8 plus `course_number` 1–12), an exact instructor pair (`first_name` plus `last_name`, each 1–64), or both.
 
-Provide the course pair, the professor pair, or both. Routes: `/course/sections/trends`, `/professor/sections/trends`, or `/combined/sections/trends` — the Trends routes embed course and professor summaries, so one request covers the page. Result rows: `id`, `course`, `title`, `section`, `term`, `mode`, `meetings`, `professors`.
+Optional: `term` (2–24), `limit` (default 10, max 25), `cursor`. Terms accept `26S`, `26U`, `26F`, four-digit-year equivalents, or `Spring 2026`/`Summer 2026`/`Fall 2026`.
+
+Routes: `/course/sections/trends`, `/professor/sections/trends`, or `/combined/sections/trends`. One response embeds instructor and course summaries; local filtering/sorting/paging adds no per-section requests. Rows include ID, course, section, term, mode, meetings and instructors.
+
+Trends is derived and can lag; empty results do not prove a class is not offered. No live seat-count or waitlist claims. Available indexed terms appear in metadata.
+
+Example: `{"subject_prefix":"CS","course_number":"1336","term":"26F"}`.
 
 ## section_get — academics
 
-| Argument | Required | Type |
-| --- | --- | --- |
-| `section_id` | yes | 24-hex upstream id |
+Required: `section_id` (24 hex).
 
-Routes: `GET /section/{id}` and `GET /section/{id}/professors`. Result: `term` (`id`, `name`, `start`, `end`), `section_number`, `course_id`, `instruction_mode`, `core_flags`, `syllabus_uri`, `meetings`, `professors`, `teaching_assistants`. Grade distributions are intentionally excluded; use `grades_get` with `section_id`.
+Routes: `/section/{id}` and `/section/{id}/professors`. Returns term dates, course reference, instruction mode, core flags, syllabus, meetings, instructors, and TA names/roles (no TA emails). Grade fields are not required for schedule discovery; use `grades_get` for grades.
 
 ## professor_search — academics
 
-| Argument | Required | Type |
-| --- | --- | --- |
-| `first_name` | one of | string 1–40, exact |
-| `last_name` | one of | string 1–40, exact |
-| `limit` | no | 1–25, default 10 |
-| `cursor` | no | string ≤512 |
+At least one of `first_name` or `last_name` (each 1–64). Optional `limit` (default 10, max 20), `cursor`.
 
-Route: `GET /professor?first_name=…&last_name=…&offset=…`. Names are never title-cased or retried with different capitalization. Rows: `id`, `name`, `first_name`, `last_name`, `titles`, `email`, `office`.
+Route: `GET /professor` with exact names and `offset`. Rows: ID, full name, titles, email and office. Whitespace-only names fail rather than dropping name scoping.
 
 ## professor_get — academics
 
-| Argument | Required | Type |
-| --- | --- | --- |
-| `professor_id` | yes | 24-hex upstream id |
+Required: `professor_id` (24 hex).
 
-Route: `GET /professor/{id}`. Result: contact details, `office`, `office_hours`, and a bounded `section_count`/`section_ids` sample. No automatic course expansion.
+Route: `/professor/{id}`. Returns bounded directory contacts, office, office hours, profile link, total indexed section count and a small ID sample. No automatic course expansion.
 
 ## grades_get — academics
 
-| Argument | Required | Type | Notes |
-| --- | --- | --- | --- |
-| `course_id` / `professor_id` / `section_id` | one | 24-hex id | `by` must be `overall` for ids |
-| `subject_prefix` + `course_number` | pair | strings | Exact |
-| `section_number` | no | string | Requires the course pair |
-| `first_name` + `last_name` | pair | strings | Exact, name-keyed aggregate |
-| `by` | no | `overall` \| `term` \| `term_section_type` | Default `overall` |
-| `terms` | no | string[] ≤12 | Only with `by=term*`; entries canonicalised |
-| `limit` | no | 1–40, default 12 | Per-term rows, newest first |
-| `cursor` | no | string ≤512 | |
+Choose exactly one ID (`course_id`, `professor_id`, `section_id`, each 24 hex), **or** exact filters. Never mix ID and filter targets.
 
-Routes: `/course/{id}/grades`, `/professor/{id}/grades`, `/section/{id}/grades`, `/grades/overall`, `/grades/semester`, `/grades/semester/sectionType`.
+Filters:
 
-Result: `by`, `scope`, `buckets` (or `terms[]` with `period`, `term`, `buckets`, `total`, and `groups[]` for section types), `total`. Buckets are the 14 verified Trends labels in order: `A+, A, A-, B+, B, B-, C+, C, C-, D+, D, D-, F, W`. An all-zero distribution means no recorded observations. No GPA and no instructor ranking is computed or implied.
+- `subject_prefix` (1–8), optionally `course_number` (1–12), then optionally `section_number` (1–12).
+- One or both of `first_name`, `last_name` (each 1–64), alone or alongside course filters.
+- Number requires prefix; section requires prefix+number. Prefix alone is allowed.
 
-Aggregates are complete upstream responses, so per-term `has_more` is exact.
+Options:
+
+- `by`: `overall` (default), `term`, or `term_section_type`.
+- ID targets support **overall only** and no term filtering.
+- `terms`: 1–6 term strings (each 2–24), only for grouped term modes.
+- `limit`: default 12, max 40 term rows. `cursor` is only valid in term modes.
+
+Routes: ID `/grades` endpoints or `/grades/overall`, `/grades/semester`, `/grades/semester/sectionType`. Returns labelled counts, total observations and explicit scope. Per-term rows are newest first; section-type rows retain all 15 currently supported groups. Unexpected additional groups are explicitly marked truncated with `group_count`.
+
+Bucket order: `A+, A, A-, B+, B, B-, C+, C, C-, D+, D, D-, F, W`. Exactly 14 nonnegative integer buckets are required. All zeros mean no observations, not proof of an existing/missing entity. No GPA or instructor ranking.
+
+Name filters can merge homonyms. Course filters can combine cross-listed/renumbered data through internal course numbers. ID targets scope to their supplied entity. Historical grades do not establish current teaching availability.
+
+Example: `{"subject_prefix":"CS","course_number":"1336","by":"term","terms":["26S","26U"]}`.
 
 ## academic_calendar_get — academics
 
-| Argument | Required | Type | Notes |
-| --- | --- | --- | --- |
-| `term` | no | string | Canonical `YY[SUF]`, four-digit year, or season + year |
+Optional `term` (2–24), with the same term formats as sections. Omitted uses `/academicCalendars/current`; otherwise `/academicCalendars/{term}`.
 
-Route: `GET /academicCalendars/current` when `term` is omitted, else `GET /academicCalendars/{id}`. Result: `id`, `timeline`, `sessions[]` with registration and drop deadlines, reading days, exams, closings, and `upstream_url`. Dates pass through as upstream text without timezone conversion.
-
-Omitting `term` returns whatever the upstream API marks as current. The server never infers the term from the clock and cannot certify that the marker is fresh.
+Returns sessions, registration/drop deadlines, exams, closings and official source URL. Dates remain upstream text, without timezone conversion or invented times. The server does not derive the current term from the wall clock or certify freshness of the upstream marker. Session reductions are marked truncated and include original `session_count`; consult the source URL for the complete calendar.
 
 ## club_search — clubs
 
-| Argument | Required | Type | Notes |
-| --- | --- | --- | --- |
-| `query` | yes | string 2–80 | `%` and `_` removed; must keep ≥2 characters |
-| `limit` | no | 1–25, default 10 | |
-| `cursor` | no | string ≤512 | |
+Required `query` (1–120 characters; must retain at least two letters/digits after removing SQL-LIKE wildcards/backslashes). Optional `limit` (default 5, max 15), `cursor`.
 
-Route: `GET /club/search?q=…`. Upstream ranking is preserved; paging is local to the returned page. Rows: `id`, `slug`, `name`, `tags`, `summary`, `updated_at`. A `null` upstream result is treated as empty.
+Route: `/club/search?q=…`. Preserves fuzzy upstream ranking and pages locally. Returns ID, slug, name, tags, summary and update time. Upstream search **404** or null list becomes empty matches; authentication and other errors are not suppressed.
+
+Example: `{"query":"robotics","limit":5}`.
 
 ## club_get — clubs
 
-| Argument | Required | Type |
-| --- | --- | --- |
-| `club_id` | yes | numeric upstream id |
+Required `club_id` (1–128-character opaque path-safe identifier, **not a slug**). IDs may be numeric but need not be MongoDB IDs.
 
-Route: `GET /club/{id}`. Result: `description`, `tags`, `image`, `contacts[]`, `officers[]`, `updated_at`. Contact links are data only and are never opened.
+Route: `/club/{id}`. Returns description, tags, contacts, officers and update time. No approval/active-status guarantee. Links are data only; no contacts are messaged or opened. Getter 404 remains `NOT_FOUND`.
 
 ## campus_events_on_date — events (opt-in)
 
-| Argument | Required | Type | Notes |
-| --- | --- | --- | --- |
-| `date` | yes | `YYYY-MM-DD` | Real calendar date |
-| `building` | no | string 1–20 | Exact upstream building code |
-| `room` | no | string 1–20 | Requires `building` |
-| `query` | no | string 1–80 | Local case-insensitive filter over title, description, tags, types, departments, building, room |
-| `limit` | no | 1–50, default 15 | |
-| `cursor` | no | string ≤512 | |
+Required real `date` (`YYYY-MM-DD`, year 2000–2100). Optional `building`, `room` (each 1–60 path-safe characters; room requires building), `query` (1–80), `limit` (default 15, max 50), `cursor`.
 
-Route: `/calendar/{date}[/{building}[/{room}]]` — one request per call. Rows: `title`, `start`, `end`, `building`, `room`, `types`, `tags`, `url`, `description` (bounded). Contact email and phone are omitted.
+Route: `/calendar/{date}[/{building}[/{room}]]`. One response is flattened and optionally filtered locally (case-insensitive keyword). Rows: title, start/end, location, types, tags, link and bounded description. Contact email/phone are omitted. This is Comet Calendar, not class meetings or a verified booking feed. Empty may mean not indexed.
 
 Enable with `NEBULA_MCP_TOOLSETS=academics,clubs,events`.
 
@@ -138,14 +116,16 @@ Enable with `NEBULA_MCP_TOOLSETS=academics,clubs,events`.
 
 | Code | Meaning |
 | --- | --- |
-| `INVALID_ARGUMENT` | Bounded argument violation, rejected before any request |
-| `NOT_FOUND` | Upstream 404 for a specific id |
-| `AUTH_MISSING` | `NEBULA_API_KEY` absent; no network call was made |
-| `AUTH_REJECTED` | Upstream rejected the key (401/403) |
-| `RATE_LIMITED` | Upstream 429 that survived the bounded retry |
+| `INVALID_ARGUMENT` | Invalid types, unknown properties, bounds or combinations; no upstream request |
+| `NOT_FOUND` | Upstream 404, except the club-search empty-match case |
+| `AUTH_MISSING` | No `NEBULA_API_KEY`; no upstream request |
+| `AUTH_REJECTED` | Upstream 401/403 |
+| `RATE_LIMITED` | Upstream 429 after bounded retry or long Retry-After |
 | `UPSTREAM_TIMEOUT` | Attempt or total time budget exhausted |
-| `UPSTREAM_ERROR` | Other upstream failure, including refused redirects |
-| `UPSTREAM_SCHEMA` | Response shape did not match the expected schema |
-| `RESPONSE_TOO_LARGE` | Body exceeded the streaming byte ceiling |
-| `CANCELLED` | The caller cancelled the request |
-| `UNSUPPORTED` | Upstream lacks the requested capability |
+| `UPSTREAM_ERROR` | Other upstream/network failure or refused redirect |
+| `UPSTREAM_SCHEMA` | Unexpected envelope or payload shape |
+| `RESPONSE_TOO_LARGE` | Streaming body or complete tool output exceeded its budget |
+| `CANCELLED` | Caller cancelled |
+| `UNSUPPORTED` | Reserved for unsupported capabilities |
+
+Errors never echo rejected input values, upstream internals or runtime credentials. Strict schemas remain visible for model discovery, but handler validation runs inside the bounded error boundary instead of the high-level SDK's unbounded enum-error formatter.
