@@ -293,7 +293,13 @@ export class NebulaRepository {
     const result = await this.#client.get(path, undefined, options);
     return {
       date,
-      events: flattenEvents(result.data),
+      // The room-specific upstream envelope omits its parent building. Keep
+      // that verified request context instead of losing the event location.
+      events: flattenEvents(result.data).map((entry) => ({
+        ...entry,
+        building: entry.building || building || '',
+        room: entry.room || room || '',
+      })),
       requests: result.requests,
     };
   }

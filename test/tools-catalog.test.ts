@@ -280,6 +280,23 @@ test('campus_events supports building and room narrowing and query filtering', a
   assert.equal(itemsOf(filtered)[0]!['title'], 'Guest Talk');
 });
 
+test('campus_events preserves parent location with actual building-only and room-only envelopes', async () => {
+  const wide = calendarDateEnvelope();
+  const buildingEnvelope = (wide['buildings'] as Array<Record<string, unknown>>)[0]!;
+  const roomEnvelope = (buildingEnvelope['rooms'] as Array<Record<string, unknown>>)[0]!;
+  const buildingFetch = fakeFetch(async () => envelope(buildingEnvelope));
+  const roomFetch = fakeFetch(async () => envelope(roomEnvelope));
+  const building = await invoke(campusEventsTool, { date: '2026-11-18', building: 'ECSS' }, buildingFetch.fetch);
+  assert.equal(itemsOf(building)[0]!['building'], 'ECSS');
+  assert.equal(itemsOf(building)[0]!['room'], '2.101');
+  const room = await invoke(campusEventsTool, { date: '2026-11-18', building: 'ECSS', room: '2.101' }, roomFetch.fetch);
+  assert.equal(itemsOf(room)[0]!['building'], 'ECSS');
+  assert.equal(itemsOf(room)[0]!['room'], '2.101');
+  const localMatch = await invoke(campusEventsTool, { date: '2026-11-18', building: 'ECSS', room: '2.101', query: 'ECSS' }, roomFetch.fetch);
+  assert.ok(itemsOf(localMatch).length > 0);
+  assert.equal(roomFetch.calls.length, 2);
+});
+
 test('campus_events validates dates, rooms, and extra properties', async () => {
   const upstream = fakeFetch(async () => envelope(calendarDateEnvelope()));
   const cases: unknown[] = [
