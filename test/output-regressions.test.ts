@@ -32,6 +32,38 @@ test('oversized professor names are bounded with visible truncation and usable p
   assert.ok(jsonBytes(result.result) <= HARD_RESULT_BYTES);
 });
 
+test('UTF-8 budget trimming advances by emitted rows across arbitrary upstream page sizes', async () => {
+  const dataset = Array.from({ length: 17 }, (_, index) => professor({
+    _id: index.toString(16).padStart(24, '0'),
+    first_name: '界'.repeat(160),
+    titles: Array(3).fill('界'.repeat(100)),
+  }));
+  const seen: unknown[] = [];
+  let cursor: unknown;
+  let exhausted = false;
+  for (let page = 0; page < 20; page++) {
+    const result = await invoke(professorSearchTool, {
+      last_name: 'Lovelace', limit: 20, ...(cursor === undefined ? {} : { cursor }),
+    }, async (url) => {
+      const offset = Number(new URL(url).searchParams.get('offset'));
+      return envelope(dataset.slice(offset, offset + 7));
+    });
+    assert.equal(result.payload.ok, true);
+    assert.ok(jsonBytes(result.result) <= HARD_RESULT_BYTES);
+    const rows = itemsOf(result);
+    seen.push(...rows.map((row) => row['id']));
+    if (result.payload.data?.['has_more'] === false) {
+      exhausted = true;
+      break;
+    }
+    assert.ok(rows.length > 0);
+    cursor = result.payload.data?.['next_cursor'];
+    assert.equal(typeof cursor, 'string');
+  }
+  assert.equal(exhausted, true);
+  assert.deepEqual(seen, dataset.map((row) => row['_id']));
+});
+
 test('large club tags are bounded and both data and metadata disclose truncation', async () => {
   const result = await invoke(clubGetTool, { club_id: '4242' }, async () => envelope(club({ tags: ['界'.repeat(11400)] })));
   assert.equal(result.payload.ok, true);
