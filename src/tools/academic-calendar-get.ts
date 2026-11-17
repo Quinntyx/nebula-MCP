@@ -43,6 +43,6 @@ export const academicCalendarGetTool: ToolDefinition = {
       'Nothing is fetched from linked source URLs automatically.',
     ];
 
-    return success(data, { requests: result.requests, notes }, ctx.now);
+    return success(data, { requests: result.requests, notes, truncated: data['truncated'] === true }, ctx.now);
   },
 };

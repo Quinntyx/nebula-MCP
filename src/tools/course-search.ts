@@ -10,7 +10,7 @@ import { READ_ONLY_ANNOTATIONS, type ToolDefinition } from './types.js';
 
 const TOOL = 'course_search';
 const DEFAULT_LIMIT = 10;
-const MAX_LIMIT = 25;
+const MAX_LIMIT = 20;
 const PREFIX_RE = /^[A-Z0-9 &-]{1,8}$/;
 
 const shape = {

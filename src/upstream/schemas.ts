@@ -162,7 +162,9 @@ export const sectionSchema = z
       .transform((value) => value ?? []),
     core_flags: textArray,
     syllabus_uri: text,
-    grade_distribution: gradeDistributionSchema.nullish(),
+    // Section tools never display grades; future sections can have empty arrays.
+    // Grade routes validate the exact 14-bucket shape independently.
+    grade_distribution: z.unknown().optional(),
     course_details: z
       .array(basicCourseSchema)
       .nullish()

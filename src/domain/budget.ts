@@ -57,7 +57,10 @@ export function localPage<T>(rows: readonly T[], offset: number): { page: T[]; t
  */
 export function fitList(input: ListFitInput): ListFitResult {
   const desired = Math.max(0, Math.min(input.limit, input.rows.length));
-  for (let count = desired; count >= 0; count -= 1) {
+  // A nonempty page must either emit at least one row or fail explicitly.
+  // A zero-row success cannot advance a cursor without dropping data.
+  const minimum = input.rows.length > 0 ? 1 : 0;
+  for (let count = desired; count >= minimum; count -= 1) {
     const hasMore =
       input.totalRows === null
         ? count < input.rows.length
@@ -79,8 +82,8 @@ export function fitList(input: ListFitInput): ListFitResult {
     }
   }
   throw new ToolError(
-    'UNSUPPORTED',
-    'result could not fit the output budget even with zero rows; narrow the query',
+    'RESPONSE_TOO_LARGE',
+    'No result row could fit the output budget; no rows were skipped.',
     { hint: 'Add a filter or reduce the requested limit.' },
   );
 }
@@ -101,8 +104,8 @@ export function fitDetail(
   }
   if (fallback) return fallback;
   throw new ToolError(
-    'UNSUPPORTED',
-    'result exceeds the output budget; use a narrower request',
+    'RESPONSE_TOO_LARGE',
+    'The detail exceeds the output budget; use a narrower request',
     { hint: 'Add a filter or request a smaller record.' },
   );
 }

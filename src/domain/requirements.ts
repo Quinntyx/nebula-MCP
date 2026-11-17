@@ -36,19 +36,24 @@ function renderNode(node: unknown, depth: number, state: RenderState): unknown {
   }
   if (!isRecord(node)) return undefined;
   state.remaining -= 1;
+  const text = (value: string, max: number): string => {
+    const capped = capText(value, max);
+    state.truncated ||= capped.truncated;
+    return capped.text;
+  };
 
   const type = typeof node.type === 'string' ? node.type : 'unknown';
   switch (type) {
     case 'course':
       return {
         type,
-        course: capText(stringField(node, 'class_reference'), MAX_TEXT).text,
-        minimum_grade: capText(stringField(node, 'minimum_grade'), 24).text,
+        course: text(stringField(node, 'class_reference'), MAX_TEXT),
+        minimum_grade: text(stringField(node, 'minimum_grade'), 24),
       };
     case 'collection':
       return {
         type,
-        name: capText(stringField(node, 'name'), MAX_TEXT).text,
+        name: text(stringField(node, 'name'), MAX_TEXT),
         required: numberField(node, 'required'),
         options: renderOptions(node.options, depth, state),
       };
@@ -62,7 +67,7 @@ function renderNode(node: unknown, depth: number, state: RenderState): unknown {
       const choices = isRecord(node.choices) ? node.choices : node;
       return {
         type,
-        name: capText(stringField(choices, 'name'), MAX_TEXT).text,
+        name: text(stringField(choices, 'name'), MAX_TEXT),
         required: numberField(choices, 'required'),
         options: renderOptions(choices.options, depth, state),
       };
@@ -72,35 +77,35 @@ function renderNode(node: unknown, depth: number, state: RenderState): unknown {
     case 'core':
       return {
         type,
-        core_flag: capText(stringField(node, 'core_flag'), 64).text,
+        core_flag: text(stringField(node, 'core_flag'), 64),
         hours: numberField(node, 'hours'),
       };
     case 'gpa':
       return {
         type,
         minimum: typeof node.minimum === 'number' ? node.minimum : undefined,
-        subset: capText(stringField(node, 'subset'), MAX_TEXT).text,
+        subset: text(stringField(node, 'subset'), MAX_TEXT),
       };
     case 'major':
-      return { type, major: capText(stringField(node, 'major'), MAX_TEXT).text };
+      return { type, major: text(stringField(node, 'major'), MAX_TEXT) };
     case 'minor':
-      return { type, minor: capText(stringField(node, 'minor'), MAX_TEXT).text };
+      return { type, minor: text(stringField(node, 'minor'), MAX_TEXT) };
     case 'consent':
-      return { type, granter: capText(stringField(node, 'granter'), MAX_TEXT).text };
+      return { type, granter: text(stringField(node, 'granter'), MAX_TEXT) };
     case 'section':
-      return { type, section_reference: capText(stringField(node, 'section_reference'), 64).text };
+      return { type, section_reference: text(stringField(node, 'section_reference'), 64) };
     case 'other':
       return {
         type,
-        description: capText(stringField(node, 'description'), MAX_TEXT).text,
-        condition: capText(stringField(node, 'condition'), MAX_TEXT).text,
+        description: text(stringField(node, 'description'), MAX_TEXT),
+        condition: text(stringField(node, 'condition'), MAX_TEXT),
       };
     case 'none':
       return { type };
     default:
       return {
         type: 'unsupported',
-        upstream_type: capText(type, 48).text,
+        upstream_type: text(type, 48),
         note: 'unrecognised requirement type; see the upstream course catalog',
       };
   }
@@ -109,10 +114,13 @@ function renderNode(node: unknown, depth: number, state: RenderState): unknown {
 function renderOptions(options: unknown, depth: number, state: RenderState): unknown[] {
   if (!Array.isArray(options)) return [];
   const rendered: unknown[] = [];
-  for (const option of options) {
-    const child = renderNode(option, depth + 1, state);
+  for (let index = 0; index < options.length; index++) {
+    if (state.remaining <= 0) {
+      state.truncated = true;
+      break;
+    }
+    const child = renderNode(options[index], depth + 1, state);
     if (child !== undefined) rendered.push(child);
-    if (state.remaining <= 0) break;
   }
   return rendered;
 }

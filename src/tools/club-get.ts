@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { fitDetail, scaledCap } from '../domain/budget.js';
-import { capArray, capText, compact } from '../format.js';
+import { capArray, capText, compact, ViewBounds } from '../format.js';
 import { parseArgs } from './args.js';
 import { success } from './result.js';
 import { READ_ONLY_ANNOTATIONS, type ToolDefinition } from './types.js';
@@ -33,27 +33,30 @@ export const clubGetTool: ToolDefinition = {
     const contacts = capArray(club.contacts, 6);
     const officers = capArray(club.officers, 8);
 
-    const data = fitDetail((scale) =>
-      compact({
-        id: club.id,
-        slug: club.slug || undefined,
-        name: capText(club.name, scaledCap(90, scale)).text,
-        description: capText(club.description, scaledCap(1500, scale, 300)).text || undefined,
-        tags: capArray(club.tags, 10).items,
-        image: club.profile_image || undefined,
-        contacts: contacts.items.map((contact) =>
-          compact({ platform: contact.platform || undefined, url: capText(contact.url, 300).text || undefined }),
-        ),
+    const data = fitDetail((scale) => {
+      const bounds = new ViewBounds();
+      return compact({
+        id: bounds.text(club.id, 128),
+        slug: bounds.text(club.slug, 128) || undefined,
+        name: bounds.text(club.name, scaledCap(90, scale)),
+        description: bounds.text(club.description, scaledCap(1500, scale, 300)) || undefined,
+        tags: bounds.array(club.tags, 10).map((tag) => bounds.text(tag, 80)),
+        image: bounds.text(club.profile_image, 400) || undefined,
+        contacts: contacts.items.map((contact) => compact({
+          platform: bounds.text(contact.platform, 40) || undefined,
+          url: bounds.text(contact.url, 300) || undefined,
+        })),
         officers: officers.items.map(officerView),
-        updated_at: club.updated_at || undefined,
-      }),
-    );
+        updated_at: bounds.text(club.updated_at, 64) || undefined,
+        truncated: bounds.truncated || contacts.truncated || officers.truncated || undefined,
+      });
+    });
 
     return success(
       data,
       {
         requests: result.requests,
-        truncated: contacts.truncated || officers.truncated,
+        truncated: data['truncated'] === true,
         notes: [
           'Organization details are self-reported in the upstream index; this server does not verify approval or active status.',
           'Officer and contact fields are capped for readability and are never followed automatically.',

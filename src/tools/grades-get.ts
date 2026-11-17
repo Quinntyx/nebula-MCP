@@ -111,6 +111,8 @@ interface Period {
   buckets?: Record<string, number>;
   total?: number;
   groups?: Array<{ type: string; buckets: Record<string, number>; total: number }>;
+  group_count?: number;
+  truncated?: boolean | undefined;
 }
 
 export const gradesGetTool: ToolDefinition = {
@@ -190,10 +192,14 @@ export const gradesGetTool: ToolDefinition = {
       periods = result.value
         .filter((row) => requestedTerms === undefined || matchesTerms(row._id, requestedTerms))
         .map((row: UpstreamTypedGradeData) => {
-          const groups = capArray(row.data, 4);
+          // Upstream defines 14 named section types plus OTHERS. Preserve all
+          // supported groups; signal any unexpected additional groups explicitly.
+          const groups = capArray(row.data, 15);
           return {
-            id: row._id,
+            id: capText(row._id, 40).text,
             term: canonicalSessionName(row._id),
+            group_count: row.data.length,
+            truncated: groups.truncated || undefined,
             groups: groups.items.map((group) => {
               const counts = toGradeCounts(group.grade_distribution);
               return {
@@ -231,6 +237,8 @@ export const gradesGetTool: ToolDefinition = {
             buckets: row.buckets,
             total: row.total,
             groups: row.groups,
+            group_count: row.group_count,
+            truncated: row.truncated,
           });
         }),
         returned: state.returned,
@@ -250,7 +258,7 @@ export const gradesGetTool: ToolDefinition = {
       if (missing.length > 0) {
         notes.push(`No rows were returned for requested term(s): ${missing.join(', ')}.`);
       }
-      const availableTerms = [...new Set(available)].sort(compareTermsDescending).slice(0, 8);
+      const availableTerms = [...new Set(available)].sort(compareTermsDescending).slice(0, 8).map((term) => capText(term, 40).text);
       if (availableTerms.length > 0) {
         notes.push(`Term rows available in this aggregate (newest first): ${availableTerms.join(', ')}.`);
       }
@@ -281,7 +289,7 @@ function filterOf(args: {
 
 function periodOf(id: string, distribution: readonly number[]): Period {
   const counts = toGradeCounts(distribution);
-  return { id, term: canonicalSessionName(id), buckets: counts.buckets, total: counts.observations };
+  return { id: capText(id, 40).text, term: canonicalSessionName(id), buckets: counts.buckets, total: counts.observations };
 }
 
 function matchesTerms(id: string, terms: Set<string>): boolean {
@@ -295,9 +303,10 @@ function scopeNotes(args: {
   section_id?: string | undefined;
   subject_prefix?: string | undefined;
   first_name?: string | undefined;
+  last_name?: string | undefined;
 }): string[] {
   const notes: string[] = [];
-  if (args.professor_id !== undefined || args.first_name !== undefined) {
+  if (args.first_name !== undefined || args.last_name !== undefined) {
     notes.push('Instructor aggregates are keyed by name upstream, so homonymous instructors are merged.');
   }
   if (args.subject_prefix !== undefined && args.course_id === undefined) {

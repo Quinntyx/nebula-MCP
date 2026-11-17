@@ -1,65 +1,66 @@
-import { capArray, capText, compact } from '../format.js';
+import { capText, compact, ViewBounds } from '../format.js';
 import { canonicalSessionName } from '../domain/terms.js';
 import type { CalendarEvent } from '../upstream/repository.js';
 import type {
-  UpstreamAcademicCalendar,
-  UpstreamBasicCourse,
-  UpstreamBasicProfessor,
-  UpstreamClub,
-  UpstreamCourse,
-  UpstreamMeeting,
-  UpstreamProfessor,
-  UpstreamSection,
+  UpstreamAcademicCalendar, UpstreamBasicCourse, UpstreamBasicProfessor,
+  UpstreamClub, UpstreamCourse, UpstreamMeeting, UpstreamProfessor, UpstreamSection,
 } from '../upstream/schemas.js';
 
 export function fullName(person: { first_name: string; last_name: string }): string {
-  return `${person.first_name} ${person.last_name}`.trim();
+  return capText(`${person.first_name} ${person.last_name}`, 160).text;
 }
 
 export function courseCode(prefix: string, number: string): string {
-  return `${prefix} ${number}`.trim();
+  return capText(`${prefix} ${number}`, 40).text;
 }
 
 export function meetingView(meeting: UpstreamMeeting): Record<string, unknown> {
+  const bounds = new ViewBounds();
   const location = meeting.location ?? undefined;
   return compact({
-    days: capArray(meeting.meeting_days, 7).items,
-    start: meeting.start_time || undefined,
-    end: meeting.end_time || undefined,
-    modality: meeting.modality || undefined,
-    building: location?.building || undefined,
-    room: location?.room || undefined,
+    days: bounds.array(meeting.meeting_days, 7).map((day) => bounds.text(day, 24)),
+    start: bounds.text(meeting.start_time, 32) || undefined,
+    end: bounds.text(meeting.end_time, 32) || undefined,
+    modality: bounds.text(meeting.modality, 80) || undefined,
+    building: bounds.text(location?.building, 40) || undefined,
+    room: bounds.text(location?.room, 40) || undefined,
+    truncated: bounds.truncated || undefined,
   });
 }
 
 export function officeView(
   location: { building?: string | null | undefined; room?: string | null | undefined } | null | undefined,
 ): Record<string, unknown> | undefined {
-  if (!location) return undefined;
-  if (!location.building && !location.room) return undefined;
+  if (!location || (!location.building && !location.room)) return undefined;
+  const bounds = new ViewBounds();
   return compact({
-    building: location.building || undefined,
-    room: location.room || undefined,
+    building: bounds.text(location.building, 40) || undefined,
+    room: bounds.text(location.room, 40) || undefined,
+    truncated: bounds.truncated || undefined,
   });
 }
 
 export function courseSummaryRow(course: UpstreamCourse): Record<string, unknown> {
+  const bounds = new ViewBounds();
   return compact({
-    id: course._id,
+    id: bounds.text(course._id, 128),
     code: courseCode(course.subject_prefix, course.course_number),
-    title: capText(course.title, 90).text,
-    credit_hours: course.credit_hours || undefined,
-    catalog_year: course.catalog_year || undefined,
+    title: bounds.text(course.title, 90),
+    credit_hours: bounds.text(course.credit_hours, 40) || undefined,
+    catalog_year: bounds.text(course.catalog_year, 32) || undefined,
+    truncated: bounds.truncated || undefined,
   });
 }
 
 export function professorRow(professor: UpstreamProfessor): Record<string, unknown> {
+  const bounds = new ViewBounds();
   return compact({
-    id: professor._id,
-    name: fullName(professor),
-    titles: capArray(professor.titles, 3).items,
-    email: professor.email || undefined,
+    id: bounds.text(professor._id, 128),
+    name: bounds.text(`${professor.first_name} ${professor.last_name}`, 160),
+    titles: bounds.array(professor.titles, 3).map((title) => bounds.text(title, 100)),
+    email: bounds.text(professor.email, 160) || undefined,
     office: officeView(professor.office),
+    truncated: bounds.truncated || undefined,
   });
 }
 
@@ -68,102 +69,107 @@ export function termLabel(value: string): string {
 }
 
 export function sectionRow(section: UpstreamSection): Record<string, unknown> {
+  const bounds = new ViewBounds();
   const course = section.course_details?.[0];
-  const professors = capArray(section.professor_details ?? [], 4).items.map((professor) =>
-    compact({ id: professor._id ?? undefined, name: fullName(professor) }),
+  const professors = bounds.array(section.professor_details ?? [], 4).map((professor) =>
+    compact({ id: bounds.text(professor._id, 128) || undefined, name: bounds.text(`${professor.first_name} ${professor.last_name}`, 160) }),
   );
   return compact({
-    id: section._id,
+    id: bounds.text(section._id, 128),
     course: course ? courseCode(course.subject_prefix, course.course_number) : undefined,
-    course_id: (!course && section.course_reference) || undefined,
-    title: course ? capText(course.title, 70).text : undefined,
-    section: section.section_number || undefined,
+    course_id: !course ? bounds.text(section.course_reference, 128) || undefined : undefined,
+    title: course ? bounds.text(course.title, 70) : undefined,
+    section: bounds.text(section.section_number, 16) || undefined,
     term: termLabel(section.academic_session?.name ?? ''),
-    mode: section.instruction_mode || undefined,
-    meetings: capArray(section.meetings, 3).items.map(meetingView),
+    mode: bounds.text(section.instruction_mode, 80) || undefined,
+    meetings: bounds.array(section.meetings, 3).map(meetingView),
     professors,
+    truncated: bounds.truncated || undefined,
   });
 }
 
 export function basicCourseView(course: UpstreamBasicCourse): Record<string, unknown> {
+  const bounds = new ViewBounds();
   return compact({
-    id: course._id ?? undefined,
+    id: bounds.text(course._id, 128) || undefined,
     code: courseCode(course.subject_prefix, course.course_number),
-    title: capText(course.title, 80).text,
-    credit_hours: course.credit_hours || undefined,
+    title: bounds.text(course.title, 80),
+    credit_hours: bounds.text(course.credit_hours, 40) || undefined,
+    truncated: bounds.truncated || undefined,
   });
 }
 
 export function basicProfessorRef(professor: UpstreamBasicProfessor): Record<string, unknown> {
-  return compact({ id: professor._id ?? undefined, name: fullName(professor) });
+  return compact({ id: capText(professor._id, 128).text || undefined, name: fullName(professor) });
 }
 
 export function clubRow(club: UpstreamClub): Record<string, unknown> {
+  const bounds = new ViewBounds();
   return compact({
-    id: club.id,
-    slug: club.slug || undefined,
-    name: capText(club.name, 90).text,
-    tags: capArray(club.tags, 6).items,
-    summary: capText(club.description, 160).text,
-    updated_at: club.updated_at || undefined,
+    id: bounds.text(club.id, 128),
+    slug: bounds.text(club.slug, 128) || undefined,
+    name: bounds.text(club.name, 90),
+    tags: bounds.array(club.tags, 6).map((tag) => bounds.text(tag, 80)),
+    summary: bounds.text(club.description, 160),
+    updated_at: bounds.text(club.updated_at, 64) || undefined,
+    truncated: bounds.truncated || undefined,
   });
 }
 
 export function eventRow(entry: CalendarEvent, descriptionCap: number): Record<string, unknown> {
+  const bounds = new ViewBounds();
   const { event } = entry;
   return compact({
-    title: capText(event.summary, 110).text,
-    start: event.start_time || undefined,
-    end: event.end_time || undefined,
-    building: entry.building || undefined,
-    room: entry.room || undefined,
-    types: capArray(event.event_type, 4).items,
-    tags: capArray(event.event_tags, 6).items,
-    url: event.event_website || undefined,
-    description: capText(event.description, descriptionCap).text || undefined,
+    title: bounds.text(event.summary, 110),
+    start: bounds.text(event.start_time, 64) || undefined,
+    end: bounds.text(event.end_time, 64) || undefined,
+    building: bounds.text(entry.building, 40) || undefined,
+    room: bounds.text(entry.room, 40) || undefined,
+    types: bounds.array(event.event_type, 4).map((type) => bounds.text(type, 80)),
+    tags: bounds.array(event.event_tags, 6).map((tag) => bounds.text(tag, 80)),
+    url: bounds.text(event.event_website, 400) || undefined,
+    description: bounds.text(event.description, descriptionCap) || undefined,
+    truncated: bounds.truncated || undefined,
   });
 }
 
-function dateList(entries: readonly (readonly string[])[], maxEntries: number): string[][] {
-  return capArray(entries, maxEntries).items.map((entry) => capArray(entry, 8).items.map((item) => capText(item, 120).text));
-}
-
 export function calendarView(calendar: UpstreamAcademicCalendar, scale: number): Record<string, unknown> {
-  const sessions = capArray(calendar.sessions, 10).items.map((session) =>
+  const bounds = new ViewBounds();
+  const dates = (entries: readonly string[]): string[] => bounds.array(entries, 8).map((item) => bounds.text(item, 120));
+  const dateList = (entries: readonly (readonly string[])[]): string[][] =>
+    bounds.array(entries, Math.max(2, Math.floor(12 * scale))).map(dates);
+  const sessions = bounds.array(calendar.sessions, Math.max(1, Math.floor(10 * scale))).map((session) =>
     compact({
-      name: capText(session.name, 80).text,
-      begin: session.begin || undefined,
-      last_registration: session.last_registration || undefined,
-      late_registration: capArray(session.late_registration, 8).items.map((item) => capText(item, 120).text),
-      census_day: session.census_day || undefined,
-      drop_deadlines: session.drop_deadlines
-        ? compact({
-            without_w: session.drop_deadlines.without_w || undefined,
-            undergrad_approval_required: session.drop_deadlines.undergrad_approval_required || undefined,
-            graduate_withdrawl_ends: session.drop_deadlines.graduate_withdrawl_ends || undefined,
-          })
-        : undefined,
-      end: session.end || undefined,
-      reading_days: capArray(session.reading_days, 8).items.map((item) => capText(item, 120).text),
-      exams: capArray(session.exams, 8).items.map((item) => capText(item, 120).text),
-      final_grading_period: capArray(session.final_grading_period, 8).items.map((item) =>
-        capText(item, 120).text,
-      ),
+      name: bounds.text(session.name, 80),
+      begin: bounds.text(session.begin, 120) || undefined,
+      last_registration: bounds.text(session.last_registration, 120) || undefined,
+      late_registration: dates(session.late_registration),
+      census_day: bounds.text(session.census_day, 120) || undefined,
+      drop_deadlines: session.drop_deadlines ? compact({
+        without_w: bounds.text(session.drop_deadlines.without_w, 120) || undefined,
+        undergrad_approval_required: bounds.text(session.drop_deadlines.undergrad_approval_required, 120) || undefined,
+        graduate_withdrawl_ends: bounds.text(session.drop_deadlines.graduate_withdrawl_ends, 120) || undefined,
+      }) : undefined,
+      end: bounds.text(session.end, 120) || undefined,
+      reading_days: dates(session.reading_days),
+      exams: dates(session.exams),
+      final_grading_period: dates(session.final_grading_period),
     }),
   );
-
   return compact({
-    id: calendar._id,
-    timeline: calendar.timeline || undefined,
-    enrollment_opens: calendar.enrollment_opens || undefined,
-    schedule_planner_available: calendar.schedule_planner_available || undefined,
-    online_add_swap_ends: calendar.online_add_swap_ends || undefined,
-    last_readmission: calendar.last_readmission || undefined,
-    last_from_waitlist: calendar.last_from_waitlist || undefined,
-    midterms_due: calendar.midterms_due || undefined,
-    university_closings: dateList(calendar.university_closings, Math.round(12 * Math.max(scale, 0.3))),
-    no_classes: dateList(calendar.no_classes, Math.round(12 * Math.max(scale, 0.3))),
+    id: bounds.text(calendar._id, 32),
+    timeline: bounds.text(calendar.timeline, 80) || undefined,
+    enrollment_opens: bounds.text(calendar.enrollment_opens, 120) || undefined,
+    schedule_planner_available: bounds.text(calendar.schedule_planner_available, 120) || undefined,
+    online_add_swap_ends: bounds.text(calendar.online_add_swap_ends, 120) || undefined,
+    last_readmission: bounds.text(calendar.last_readmission, 120) || undefined,
+    last_from_waitlist: bounds.text(calendar.last_from_waitlist, 120) || undefined,
+    midterms_due: bounds.text(calendar.midterms_due, 120) || undefined,
+    university_closings: dateList(calendar.university_closings),
+    no_classes: dateList(calendar.no_classes),
     sessions,
-    upstream_url: calendar.url || undefined,
+    session_count: calendar.sessions.length,
+    upstream_url: bounds.text(calendar.url, 400) || undefined,
+    truncated: bounds.truncated || undefined,
   });
 }

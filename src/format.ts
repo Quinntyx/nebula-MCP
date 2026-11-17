@@ -17,6 +17,23 @@ export function capArray<T>(items: readonly T[], max: number): { items: T[]; tru
   return { items: items.slice(0, max), truncated: true };
 }
 
+/** Track every field/collection reduction within one presentation object. */
+export class ViewBounds {
+  truncated = false;
+
+  text(value: string | null | undefined, max: number): string {
+    const result = capText(value, max);
+    this.truncated ||= result.truncated;
+    return result.text;
+  }
+
+  array<T>(items: readonly T[], max: number): T[] {
+    const result = capArray(items, max);
+    this.truncated ||= result.truncated;
+    return result.items;
+  }
+}
+
 /** Drop undefined members so minified JSON stays compact. */
 export function compact<T extends Record<string, unknown>>(value: T): T {
   const output: Record<string, unknown> = {};

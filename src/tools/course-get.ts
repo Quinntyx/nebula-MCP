@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { fitDetail, scaledCap } from '../domain/budget.js';
 import { renderRequirement } from '../domain/requirements.js';
-import { capText, compact } from '../format.js';
+import { compact, ViewBounds } from '../format.js';
 import { objectIdShape, parseArgs } from './args.js';
 import { courseCode } from './mappers.js';
 import { success } from './result.js';
@@ -29,36 +29,38 @@ export const courseGetTool: ToolDefinition = {
     const coOrPre = renderRequirement(course.co_or_pre_requisites);
     const truncated = prerequisites.truncated || corequisites.truncated || coOrPre.truncated;
 
-    const data = fitDetail((scale) =>
-      compact({
-        id: course._id,
+    const data = fitDetail((scale) => {
+      const bounds = new ViewBounds();
+      return compact({
+        id: bounds.text(course._id, 128),
         code: courseCode(course.subject_prefix, course.course_number),
-        subject_prefix: course.subject_prefix,
-        course_number: course.course_number,
-        title: capText(course.title, scaledCap(160, scale)).text,
-        catalog_year: course.catalog_year || undefined,
-        credit_hours: course.credit_hours || undefined,
-        school: course.school || undefined,
-        class_level: course.class_level || undefined,
-        activity_type: course.activity_type || undefined,
-        grading: course.grading || undefined,
-        offering_frequency: course.offering_frequency || undefined,
-        lecture_contact_hours: course.lecture_contact_hours || undefined,
-        laboratory_contact_hours: course.laboratory_contact_hours || undefined,
-        description: capText(course.description, scaledCap(1_200, scale)).text || undefined,
-        enrollment_requirements: capText(course.enrollment_reqs, scaledCap(400, scale)).text || undefined,
+        subject_prefix: bounds.text(course.subject_prefix, 16),
+        course_number: bounds.text(course.course_number, 16),
+        title: bounds.text(course.title, scaledCap(160, scale)),
+        catalog_year: bounds.text(course.catalog_year, 32) || undefined,
+        credit_hours: bounds.text(course.credit_hours, 40) || undefined,
+        school: bounds.text(course.school, 160) || undefined,
+        class_level: bounds.text(course.class_level, 80) || undefined,
+        activity_type: bounds.text(course.activity_type, 80) || undefined,
+        grading: bounds.text(course.grading, 80) || undefined,
+        offering_frequency: bounds.text(course.offering_frequency, 160) || undefined,
+        lecture_contact_hours: bounds.text(course.lecture_contact_hours, 40) || undefined,
+        laboratory_contact_hours: bounds.text(course.laboratory_contact_hours, 40) || undefined,
+        description: bounds.text(course.description, scaledCap(1_200, scale)) || undefined,
+        enrollment_requirements: bounds.text(course.enrollment_reqs, scaledCap(400, scale)) || undefined,
         section_count: course.sections.length,
         prerequisites: prerequisites.value,
         corequisites: corequisites.value,
         co_or_pre_requisites: coOrPre.value,
-      }),
-    );
+        truncated: bounds.truncated || truncated || undefined,
+      });
+    });
 
     return success(
       data,
       {
         requests: result.requests,
-        truncated,
+        truncated: data['truncated'] === true,
         notes: [
           'Prerequisite and co-requisite trees keep their AND/OR structure with bounded depth, node count, and text length.',
           'Sections are counted only; call section_search with the exact subject prefix and course number for section records.',
