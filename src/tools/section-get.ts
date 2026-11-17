@@ -17,10 +17,7 @@ const schema = z.object(shape).strict();
 export const sectionGetTool: ToolDefinition = {
   name: TOOL,
   title: 'Get a UT Dallas section',
-  description: [
-    'Returns one section by Nebula API id: term dates, meeting pattern, instruction mode, core flags, syllabus link, teaching assistants, and instructor names.',
-    'Grade distributions are intentionally excluded; use grades_get with section_id instead.',
-  ].join(' '),
+  description: 'Get a UTD section by ID: term dates, meetings, instruction mode, core flags, syllabus, TAs and instructors. Use grades_get for grade counts.',
   toolset: 'academics',
   inputShape: shape,
   annotations: READ_ONLY_ANNOTATIONS,

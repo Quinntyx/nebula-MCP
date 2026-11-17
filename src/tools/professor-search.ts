@@ -9,7 +9,7 @@ import { READ_ONLY_ANNOTATIONS, type ToolDefinition } from './types.js';
 
 const TOOL = 'professor_search';
 const DEFAULT_LIMIT = 10;
-const MAX_LIMIT = 25;
+const MAX_LIMIT = 20;
 
 const shape = {
   first_name: z.string().min(1).max(64).optional(),
@@ -23,11 +23,7 @@ const schema = z.object(shape).strict();
 export const professorSearchTool: ToolDefinition = {
   name: TOOL,
   title: 'Search UT Dallas professors',
-  description: [
-    'Lists professors whose first and/or last name match exactly in the Nebula Labs index.',
-    'Names are matched exactly as supplied: no automatic title-casing, fuzzy matching, or retries with altered capitalization.',
-    'Returns one upstream page per call with an opaque cursor.',
-  ].join(' '),
+  description: 'Find UTD professors by exact, case-sensitive first and/or last name. At least one name required; no fuzzy matching or capitalization retries.',
   toolset: 'academics',
   inputShape: shape,
   annotations: READ_ONLY_ANNOTATIONS,

@@ -28,11 +28,7 @@ const schema = z.object(shape).strict();
 export const courseSearchTool: ToolDefinition = {
   name: TOOL,
   title: 'Search UT Dallas courses',
-  description: [
-    'Lists courses whose subject prefix (and optionally exact course number) match in the Nebula Labs catalog index.',
-    'Matches are exact after uppercasing the prefix: no title guessing, fuzzy matching, or case-insensitive retries.',
-    'Returns one upstream page per call with an opaque cursor; has_more is null when a non-empty page cannot prove exhaustion.',
-  ].join(' '),
+  description: 'Find UTD courses by exact subject prefix, number, catalog year, school or class level. Prefix required; one upstream page per call.',
   toolset: 'academics',
   inputShape: shape,
   annotations: READ_ONLY_ANNOTATIONS,

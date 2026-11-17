@@ -80,7 +80,7 @@ Tests: every tool's route/mapping and invalid inputs; strict schemas; unknown to
 
 Where the contract left room or the SDK forced a choice, the implementation decided as follows:
 
-- **Published schemas are lenient, validation is strict.** MCP tool `inputSchema` objects list every property but allow additional keys, because the SDK parses arguments before the handler runs. Each handler then validates against a `.strict()` schema and returns the bounded `INVALID_ARGUMENT` envelope, so extra properties are still rejected without surfacing protocol-level parse errors.
+- **Published schemas and validation are strict.** The official SDK's low-level server publishes strict JSON schemas, while each handler validates within our bounded error boundary. This avoids the high-level SDK validator echoing unbounded rejected enum values before the handler runs. Final tool results are redacted with the runtime key and budgeted including metadata and serialization overhead.
 - **`course_search` accepts `catalog_year`, `school`, and `class_level`.** The table above lists them as optional; the upstream `/course` route exposes them as queryable exact fields, so they are forwarded verbatim and folded into the cursor fingerprint.
 - **`meta.requests` counts upstream responses consumed by the call.** A request that fails is not counted, because the failing call's own count is discarded with the error.
 - **Grade id scopes are `by=overall` only.** Per-term aggregates require filter fields (`subject_prefix` + `course_number`, `first_name` + `last_name`), matching the upstream `/grades/semester*` routes, which are filter-keyed.

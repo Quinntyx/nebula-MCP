@@ -1,10 +1,11 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { NebulaClient, type FetchLike } from './client/http.js';
 import { API_KEY_ENV, TOOLSETS_ENV, type ServerConfig } from './config.js';
+import { invalidArgument } from './errors.js';
 import { NebulaRepository } from './upstream/repository.js';
-import { failure } from './tools/result.js';
+import { failure, protectResult } from './tools/result.js';
 import { toolCatalog, toolsFor } from './tools/registry.js';
 import { SERVER_NAME, SERVER_VERSION } from './version.js';
 
@@ -15,57 +16,54 @@ export interface ServerDeps {
 }
 
 const SERVER_INSTRUCTIONS = [
-  'Read-only Nebula Labs UT Dallas data (courses, sections, professors, grades, academic calendars, clubs, and optional campus events).',
-  `Requires ${API_KEY_ENV} for tool calls; discovery works without it. Academics and clubs are enabled by default, events only via ${TOOLSETS_ENV}.`,
-  'Filters are exact and case-sensitive. Results are compact JSON with provenance, notes, and cursors; page with the returned cursor instead of guessing offsets.',
+  'Read-only UT Dallas courses, sections, professors, grades, academic calendars, clubs, and optional campus events.',
+  `${API_KEY_ENV} is required for calls, not discovery. ${TOOLSETS_ENV} selects toolsets.`,
+  'Academic filters are exact-match; clubs support keyword search. Use returned cursors and heed provenance/freshness notes.',
 ].join(' ');
 
 /**
- * Builds the MCP server with only the toolsets implied by `config.toolsets`.
- *
- * The published input schema is intentionally lenient (unknown keys survive
- * parsing) so each tool's own strict schema can reject extra properties with a
- * bounded `INVALID_ARGUMENT` envelope instead of a protocol-level error.
+ * Use the SDK's low-level server so published schemas are strict and useful for
+ * discovery, while validation happens inside our bounded/redacted tool boundary.
+ * The high-level registerTool validator otherwise echoes invalid enum values
+ * before the handler can apply the error contract.
  */
-export function createServer(config: ServerConfig, deps: ServerDeps = {}): McpServer {
-  const server = new McpServer(
+export function createServer(config: ServerConfig, deps: ServerDeps = {}): Server {
+  const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
     { capabilities: { tools: {} }, instructions: SERVER_INSTRUCTIONS },
   );
-
-  const repo = new NebulaRepository(
-    new NebulaClient({ apiKey: config.apiKey, fetch: deps.fetch }),
-  );
+  const repo = new NebulaRepository(new NebulaClient({ apiKey: config.apiKey, fetch: deps.fetch }));
   const now = deps.now ?? (() => new Date());
   const tools = toolsFor(config.toolsets);
+  const byName = new Map(tools.map((tool) => [tool.name, tool]));
+  const secrets = config.apiKey === undefined ? [] : [config.apiKey];
   const catalog = toolCatalog(tools);
 
-  for (const tool of tools) {
-    const inputSchema = z.object(tool.inputShape).passthrough();
-    server.registerTool(
-      tool.name,
-      {
-        title: tool.title,
-        description: tool.description,
-        inputSchema,
-        annotations: tool.annotations,
-      },
-      async (args, extra): Promise<CallToolResult> => {
-        try {
-          return await tool.handler(args, { repo, now, signal: extra.signal });
-        } catch (error) {
-          return failure(error);
-        }
-      },
-    );
-  }
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: tools.map((tool): Tool => ({
+      name: tool.name,
+      title: tool.title,
+      description: tool.description,
+      inputSchema: z.toJSONSchema(z.object(tool.inputShape).strict(), { io: 'input', target: 'draft-7' }) as Tool['inputSchema'],
+      annotations: tool.annotations,
+    })),
+  }));
 
-  // Keep the enabled catalog reachable for diagnostics without logging to stdout.
-  server.server.oninitialized = () => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+    try {
+      const tool = byName.get(request.params.name);
+      if (!tool) throw invalidArgument('The requested tool is not enabled on this server.');
+      const result = await tool.handler(request.params.arguments ?? {}, { repo, now, signal: extra.signal });
+      return protectResult(result, secrets);
+    } catch (error) {
+      return protectResult(failure(error), secrets);
+    }
+  });
+
+  server.oninitialized = () => {
     process.stderr.write(
       `nebula-mcp ${SERVER_VERSION}: toolsets=${config.toolsets.join(',')} tools=${tools.length} (academics=${catalog.academics.length}, clubs=${catalog.clubs.length}, events=${catalog.events.length}) key=${config.apiKey === undefined ? 'missing' : 'present'}\n`,
     );
   };
-
   return server;
 }

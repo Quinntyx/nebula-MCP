@@ -35,10 +35,7 @@ function cleanQuery(raw: string): string {
 export const clubSearchTool: ToolDefinition = {
   name: TOOL,
   title: 'Search UT Dallas clubs',
-  description: [
-    'Searches the Nebula Labs student organization index (fuzzy text search) and returns IDs, slugs, names, tags, and short descriptions.',
-    'No approval or active-status claim is made; use club_get for full details.',
-  ].join(' '),
+  description: 'Search UTD student clubs/organizations by keyword, name, alias or tag. Returns compact ranked matches and IDs for club_get.',
   toolset: 'clubs',
   inputShape: shape,
   annotations: READ_ONLY_ANNOTATIONS,

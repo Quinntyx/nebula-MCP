@@ -14,10 +14,7 @@ const schema = z.object(shape).strict();
 export const professorGetTool: ToolDefinition = {
   name: TOOL,
   title: 'Get a UT Dallas professor',
-  description: [
-    'Returns one professor by Nebula API id: directory contact details, office, office hours, and a bounded count of indexed section references.',
-    'No automatic course expansion or schedule lookup is performed.',
-  ].join(' '),
+  description: 'Get a UTD professor by ID: directory contacts, office, office hours, profile and bounded section references. Does not expand courses.',
   toolset: 'academics',
   inputShape: shape,
   annotations: READ_ONLY_ANNOTATIONS,

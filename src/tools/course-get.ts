@@ -15,10 +15,7 @@ const schema = z.object(shape).strict();
 export const courseGetTool: ToolDefinition = {
   name: TOOL,
   title: 'Get a UT Dallas course',
-  description: [
-    'Returns one course by its Nebula API course id, including catalog metadata, a bounded prerequisite/co-requisite tree, and a section count.',
-    'Section records are counted, not expanded; use section_search to find them.',
-  ].join(' '),
+  description: 'Get a UTD course by ID: catalog metadata, description, prerequisite/corequisite tree and section count. Use course_search to find IDs.',
   toolset: 'academics',
   inputShape: shape,
   annotations: READ_ONLY_ANNOTATIONS,

@@ -15,10 +15,7 @@ const schema = z.object(shape).strict();
 export const academicCalendarGetTool: ToolDefinition = {
   name: TOOL,
   title: 'Get a UT Dallas academic calendar',
-  description: [
-    'Returns the academic calendar for one term (canonical YY[SUF], four-digit, or season + year), or the calendar the upstream API currently marks as current when term is omitted.',
-    'Includes session dates, drop deadlines, reading days, exams, closings, and the official source link.',
-  ].join(' '),
+  description: 'Get UTD academic term dates, registration/drop deadlines and exams. Term accepts 26F or Fall 2026; omitted uses the upstream current marker.',
   toolset: 'academics',
   inputShape: shape,
   annotations: READ_ONLY_ANNOTATIONS,

@@ -81,7 +81,7 @@ export class ConfigError extends Error {
   }
 }
 
-const HEADER_LIKE = /\b(x-api-key|api[-_ ]?key|authorization|cookie|set-cookie)\b(\s*[:=]\s*)([^\s"',;}]+)/gi;
+const HEADER_LIKE = /\b(x-api-key|api[-_ ]?key|authorization|cookie|set-cookie)\b(\s*[:=]\s*)(?:(?:Bearer|Basic)\s+)?[^\s"',;}]+/gi;
 const URL_USERINFO = /([a-z][a-z0-9+.-]*:\/\/)[^\s/@]*@/gi;
 
 /**
@@ -91,7 +91,7 @@ const URL_USERINFO = /([a-z][a-z0-9+.-]*:\/\/)[^\s/@]*@/gi;
 export function redactSecrets(text: string, secrets: readonly string[]): string {
   let result = text;
   for (const secret of secrets) {
-    if (secret.length < 4) continue;
+    if (secret.length === 0) continue;
     result = result.split(secret).join('[redacted]');
   }
   result = result.replace(HEADER_LIKE, (_match, name: string, separator: string) => `${name}${separator}[redacted]`);

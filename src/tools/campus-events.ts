@@ -51,10 +51,7 @@ const schema = z
 export const campusEventsTool: ToolDefinition = {
   name: TOOL,
   title: 'List UT Dallas campus events on a date',
-  description: [
-    'Lists Comet Calendar events for one real calendar date (YYYY-MM-DD), optionally narrowed to one building and room and to a local text query.',
-    'Returns compact event rows: title, start/end, location, types, tags, and link. Contact email and phone are omitted.',
-  ].join(' '),
+  description: 'List UTD Comet Calendar campus events on YYYY-MM-DD, optionally by building/room or keyword. Empty may mean the date is not indexed.',
   toolset: 'events',
   inputShape: shape,
   annotations: READ_ONLY_ANNOTATIONS,

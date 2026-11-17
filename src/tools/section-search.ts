@@ -87,11 +87,7 @@ function matches(section: UpstreamSection, query: SectionQuery): boolean {
 export const sectionSearchTool: ToolDefinition = {
   name: TOOL,
   title: 'Search UT Dallas sections',
-  description: [
-    'Lists indexed sections for one exact course pair (subject_prefix + course_number), one exact professor pair (first_name + last_name), or both, optionally narrowed to a term.',
-    'Uses the upstream Trends section route, which embeds course and professor summaries; no second page or per-section follow-up request is made.',
-    'Exact match only: no title-casing, fuzzy names, or guessed catalog years.',
-  ].join(' '),
+  description: 'List UTD Trends sections by exact course (prefix+number) and/or professor (first+last name), optionally term (26S/26U/26F). Coverage may lag.',
   toolset: 'academics',
   inputShape: shape,
   annotations: READ_ONLY_ANNOTATIONS,

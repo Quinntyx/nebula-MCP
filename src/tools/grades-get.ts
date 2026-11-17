@@ -116,10 +116,7 @@ interface Period {
 export const gradesGetTool: ToolDefinition = {
   name: TOOL,
   title: 'Get UT Dallas grade distributions',
-  description: [
-    'Returns labelled grade counts (A+ through W, 14 buckets) for one course, professor, or section, or for the exact filter combination the upstream grades routes accept.',
-    'Supports overall aggregates and per-term aggregates (optionally split by section type). No GPA or ranking is computed.',
-  ].join(' '),
+  description: 'UTD grade counts by ID (overall only) or exact course/instructor filters; overall, term, or term+section-type. Historical counts, not GPA.',
   toolset: 'academics',
   inputShape: shape,
   annotations: READ_ONLY_ANNOTATIONS,

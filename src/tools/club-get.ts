@@ -21,10 +21,7 @@ const schema = z.object(shape).strict();
 export const clubGetTool: ToolDefinition = {
   name: TOOL,
   title: 'Get a UT Dallas club',
-  description: [
-    'Returns one student organization by Nebula API club id: description, tags, contacts, officers, and the upstream update timestamp.',
-    'Contact links are returned as data and are never opened automatically.',
-  ].join(' '),
+  description: 'Get a UTD club by its club ID (not slug): description, tags, contacts, officers and update time. Links are data only.',
   toolset: 'clubs',
   inputShape: shape,
   annotations: READ_ONLY_ANNOTATIONS,
