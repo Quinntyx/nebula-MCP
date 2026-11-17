@@ -1,7 +1,7 @@
 import type { ZodTypeAny } from 'zod';
 import { z } from 'zod';
 import { NebulaClient } from '../client/http.js';
-import { upstreamSchema } from '../errors.js';
+import { ToolError, upstreamSchema } from '../errors.js';
 import {
   academicCalendarSchema,
   clubSchema,
@@ -110,7 +110,7 @@ export class NebulaRepository {
       queryOf({ ...filters, offset: String(offset) }),
       options,
     );
-    return { value: parsed(z.array(courseSchema), result.data, 'course list'), requests: result.requests };
+    return { value: parsed(z.array(courseSchema), result.data ?? [], 'course list'), requests: result.requests };
   }
 
   async course(id: string, options: RequestOptions): Promise<Fetched<UpstreamCourse>> {
@@ -129,7 +129,7 @@ export class NebulaRepository {
       options,
     );
     return {
-      value: parsed(z.array(professorSchema), result.data, 'professor list'),
+      value: parsed(z.array(professorSchema), result.data ?? [], 'professor list'),
       requests: result.requests,
     };
   }
@@ -147,7 +147,7 @@ export class NebulaRepository {
   async sectionProfessors(id: string, options: RequestOptions): Promise<Fetched<UpstreamProfessor[]>> {
     const result = await this.#client.get(`/section/${segment(id)}/professors`, undefined, options);
     return {
-      value: parsed(z.array(professorSchema), result.data, 'section professor list'),
+      value: parsed(z.array(professorSchema), result.data ?? [], 'section professor list'),
       requests: result.requests,
     };
   }
@@ -163,7 +163,7 @@ export class NebulaRepository {
       queryOf({ subject_prefix: prefix, course_number: number }),
       options,
     );
-    return { value: parsed(z.array(sectionSchema), result.data, 'course trends'), requests: result.requests };
+    return { value: parsed(z.array(sectionSchema), result.data ?? [], 'course trends'), requests: result.requests };
   }
 
   /** Trends route: returns every indexed section for one exact professor name. */
@@ -178,7 +178,7 @@ export class NebulaRepository {
       options,
     );
     return {
-      value: parsed(z.array(sectionSchema), result.data, 'professor trends'),
+      value: parsed(z.array(sectionSchema), result.data ?? [], 'professor trends'),
       requests: result.requests,
     };
   }
@@ -197,7 +197,7 @@ export class NebulaRepository {
       options,
     );
     return {
-      value: parsed(z.array(sectionSchema), result.data, 'combined trends'),
+      value: parsed(z.array(sectionSchema), result.data ?? [], 'combined trends'),
       requests: result.requests,
     };
   }
@@ -209,7 +209,7 @@ export class NebulaRepository {
 
   async gradesSemester(filters: GradeFilters, options: RequestOptions): Promise<Fetched<UpstreamGradeData[]>> {
     const result = await this.#client.get('/grades/semester', queryOf(filters), options);
-    return { value: parsed(z.array(gradeDataSchema), result.data, 'semester grades'), requests: result.requests };
+    return { value: parsed(z.array(gradeDataSchema), result.data ?? [], 'semester grades'), requests: result.requests };
   }
 
   async gradesSemesterSectionType(
@@ -218,7 +218,7 @@ export class NebulaRepository {
   ): Promise<Fetched<UpstreamTypedGradeData[]>> {
     const result = await this.#client.get('/grades/semester/sectionType', queryOf(filters), options);
     return {
-      value: parsed(z.array(typedGradeDataSchema), result.data, 'section-type grades'),
+      value: parsed(z.array(typedGradeDataSchema), result.data ?? [], 'section-type grades'),
       requests: result.requests,
     };
   }
@@ -255,10 +255,16 @@ export class NebulaRepository {
   }
 
   async searchClubs(search: string, options: RequestOptions): Promise<Fetched<UpstreamClub[]>> {
-    const result = await this.#client.get('/club/search', queryOf({ q: search }), options);
-    // Upstream returns no row (and therefore null data) when nothing matches.
-    const data = result.data ?? [];
-    return { value: parsed(z.array(clubSchema), data, 'club list'), requests: result.requests };
+    try {
+      const result = await this.#client.get('/club/search', queryOf({ q: search }), options);
+      return { value: parsed(z.array(clubSchema), result.data ?? [], 'club list'), requests: result.requests };
+    } catch (error) {
+      // Only club search defines a 404 as no matches. Detail 404s stay errors.
+      if (error instanceof ToolError && error.code === 'NOT_FOUND' && error.upstreamStatus === 404) {
+        return { value: [], requests: 1 };
+      }
+      throw error;
+    }
   }
 
   async club(id: string, options: RequestOptions): Promise<Fetched<UpstreamClub>> {

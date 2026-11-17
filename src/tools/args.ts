@@ -12,14 +12,22 @@ export const objectIdShape = z
  */
 export function parseArgs<S extends z.ZodTypeAny>(schema: S, args: unknown): z.output<S> {
   const result = schema.safeParse(args ?? {});
-  if (result.success) return result.data as z.output<S>;
+  if (result.success) {
+    if (result.data && typeof result.data === 'object' && Object.values(result.data).some(
+      (value) => typeof value === 'string' && value.trim() === '',
+    )) {
+      throw invalidArgument('Text arguments must contain non-whitespace characters.');
+    }
+    return result.data as z.output<S>;
+  }
 
   const issue = result.error.issues[0];
   if (!issue) {
     throw invalidArgument('arguments could not be validated');
   }
-  const path = issue.path.length > 0 ? issue.path.join('.') : 'arguments';
-  throw invalidArgument(`${path}: ${issue.message.slice(0, 200)}`);
+  // Zod messages can include attacker-controlled unknown property names or enum
+  // values. Publish only a static diagnostic, never the rejected input.
+  throw invalidArgument('Arguments do not match this tool schema.', 'Use the published property types, bounds, and valid argument combinations.');
 }
 
 /** Normalize user-supplied free text without guessing its meaning. */
