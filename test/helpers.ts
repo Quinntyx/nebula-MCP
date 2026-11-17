@@ -74,11 +74,18 @@ export function streamingResponse(
 /** A response whose body hangs until the request signal aborts. */
 export function hangingResponse(init: Parameters<FetchLike>[1]): Promise<FetchResponseLike> {
   return new Promise((_resolve, reject) => {
-    init.signal.addEventListener(
-      'abort',
-      () => reject(new DOMException('aborted', 'AbortError')),
-      { once: true },
-    );
+    // AbortSignal.timeout() is unref'ed on Node 22. Model a pending socket with
+    // a referenced watchdog so the test process cannot exit before cancellation.
+    const watchdog = setTimeout(() => {
+      init.signal.removeEventListener('abort', onAbort);
+      reject(new Error('hanging transport exceeded its test watchdog'));
+    }, 10_000);
+    function onAbort(): void {
+      clearTimeout(watchdog);
+      reject(new DOMException('aborted', 'AbortError'));
+    }
+    if (init.signal.aborted) onAbort();
+    else init.signal.addEventListener('abort', onAbort, { once: true });
   });
 }
 
