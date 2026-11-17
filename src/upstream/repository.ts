@@ -183,25 +183,6 @@ export class NebulaRepository {
     };
   }
 
-  /** Trends route: returns sections matching one exact course and professor pair. */
-  async trendsCombinedSections(
-    prefix: string,
-    number: string,
-    first: string,
-    last: string,
-    options: RequestOptions,
-  ): Promise<Fetched<UpstreamSection[]>> {
-    const result = await this.#client.get(
-      '/combined/sections/trends',
-      queryOf({ subject_prefix: prefix, course_number: number, first_name: first, last_name: last }),
-      options,
-    );
-    return {
-      value: parsed(z.array(sectionSchema), result.data ?? [], 'combined trends'),
-      requests: result.requests,
-    };
-  }
-
   async gradesOverall(filters: GradeFilters, options: RequestOptions): Promise<Fetched<number[]>> {
     const result = await this.#client.get('/grades/overall', queryOf(filters), options);
     return { value: parsed(gradeDistributionSchema, result.data, 'grade distribution'), requests: result.requests };

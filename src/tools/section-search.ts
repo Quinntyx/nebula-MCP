@@ -116,23 +116,18 @@ export const sectionSearchTool: ToolDefinition = {
     const fingerprint = filterFingerprint(query);
     const offset = args.cursor === undefined ? 0 : decodeCursor(args.cursor, TOOL, fingerprint);
 
-    const fetched = query.course && query.professor
-      ? await ctx.repo.trendsCombinedSections(
-          query.course.subject_prefix,
-          query.course.course_number,
-          query.professor.first_name,
-          query.professor.last_name,
+    // Live validation showed the combined materialized index intermittently
+    // returns empty for unchanged valid queries. A course query already embeds
+    // all instructors: apply the exact professor predicate locally in ONE call.
+    const fetched = query.course
+      ? await ctx.repo.trendsCourseSections(query.course.subject_prefix, query.course.course_number, {
+          signal: ctx.signal,
+        })
+      : await ctx.repo.trendsProfessorSections(
+          query.professor!.first_name,
+          query.professor!.last_name,
           { signal: ctx.signal },
-        )
-      : query.course
-        ? await ctx.repo.trendsCourseSections(query.course.subject_prefix, query.course.course_number, {
-            signal: ctx.signal,
-          })
-        : await ctx.repo.trendsProfessorSections(
-            query.professor!.first_name,
-            query.professor!.last_name,
-            { signal: ctx.signal },
-          );
+        );
 
     const availableTerms = Array.from(
       new Set(
@@ -190,6 +185,7 @@ export const sectionSearchTool: ToolDefinition = {
     }
     if (query.professor) {
       notes.push('Homonymous instructors are merged by the upstream dataset; id-based professor scoping is not available on this route.');
+      if (query.course) notes.push('Combined filters use the course Trends response with exact local instructor filtering, avoiding the upstream combined index that returned inconsistent empty results during live validation.');
     }
     if (fitted.returned < Math.min(args.limit, page.length)) {
       notes.push('Rows were trimmed to fit the output budget; has_more and next_cursor describe the rows actually returned.');

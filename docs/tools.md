@@ -35,7 +35,7 @@ Provide an exact course pair (`subject_prefix` 1–8 plus `course_number` 1–12
 
 Optional: `term` (2–24), `limit` (default 10, max 25), `cursor`. Terms accept `26S`, `26U`, `26F`, four-digit-year equivalents, or `Spring 2026`/`Summer 2026`/`Fall 2026`.
 
-Routes: `/course/sections/trends`, `/professor/sections/trends`, or `/combined/sections/trends`. One response embeds instructor and course summaries; local filtering/sorting/paging adds no per-section requests. Rows include ID, course, section, term, mode, meetings and instructors.
+Routes: `/course/sections/trends` for course or combined queries; `/professor/sections/trends` for instructor-only queries. Combined filters apply exact instructor matching locally because live validation found the separate upstream combined index intermittently returned empty results for unchanged valid queries. One response embeds instructor and course summaries; local filtering/sorting/paging adds no per-section requests. Rows include ID, course, section, term, mode, meetings and instructors.
 
 Trends is derived and can lag; empty results do not prove a class is not offered. No live seat-count or waitlist claims. Available indexed terms appear in metadata.
 
@@ -119,7 +119,7 @@ Enable with `NEBULA_MCP_TOOLSETS=academics,clubs,events`.
 | `INVALID_ARGUMENT` | Invalid types, unknown properties, bounds or combinations; no upstream request |
 | `NOT_FOUND` | Upstream 404, except the club-search empty-match case |
 | `AUTH_MISSING` | No `NEBULA_API_KEY`; no upstream request |
-| `AUTH_REJECTED` | Upstream 401/403 |
+| `AUTH_REJECTED` | Upstream 401/403 or the gateway's recognized invalid-key HTTP 400 |
 | `RATE_LIMITED` | Upstream 429 after bounded retry or long Retry-After |
 | `UPSTREAM_TIMEOUT` | Attempt or total time budget exhausted |
 | `UPSTREAM_ERROR` | Other upstream/network failure or refused redirect |

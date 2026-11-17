@@ -243,8 +243,26 @@ test('section_search routes professor-only and combined queries correctly', asyn
     upstream.fetch,
   );
   const combined = new URL(upstream.calls[1]!.url);
-  assert.equal(combined.pathname, '/combined/sections/trends');
-  assert.equal(combined.searchParams.get('first_name'), 'Ada');
+  assert.equal(combined.pathname, '/course/sections/trends');
+  assert.equal(combined.searchParams.get('first_name'), null);
+  assert.equal(combined.searchParams.get('subject_prefix'), 'CS');
+});
+
+test('section_search combined filters stay scoped without the unreliable combined index or extra requests', async () => {
+  const upstream = fakeFetch(async (url) => {
+    assert.equal(new URL(url).pathname, '/course/sections/trends');
+    return envelope([
+      section(),
+      section({ _id: ID_A, professor_details: [{ _id: ID_B, first_name: 'Different', last_name: 'Instructor' }] }),
+    ]);
+  });
+  const result = await invoke(sectionSearchTool, {
+    subject_prefix: 'CS', course_number: '1336', first_name: 'Ada', last_name: 'Lovelace',
+  }, upstream.fetch);
+  assert.equal(upstream.calls.length, 1);
+  assert.equal(itemsOf(result).length, 1);
+  assert.equal(itemsOf(result)[0]!['id'], ID_C);
+  assert.ok((result.payload.meta!['notes'] as string[]).some((note) => note.includes('exact local instructor filtering')));
 });
 
 test('section_search filters by canonical term and rejects unpaired or incomplete input', async () => {
