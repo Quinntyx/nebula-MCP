@@ -130,7 +130,19 @@ npm test            # build, then node --test dist/test/*.test.js
 npm run check       # typecheck + test
 ```
 
-Tests are fully offline: synthetic fixtures model upstream envelopes; a real stdio subprocess and the official SDK client exercise discovery, strict schemas, argument validation, missing-key handling, toolset selection, reflected-secret redaction, and output budgets. No API key, network access, or captured production data is involved. There is no live smoke test in the required path; see [AGENTS.md](AGENTS.md) for contribution rules and commit conventions.
+The required tests are fully offline: synthetic fixtures model upstream envelopes; a real stdio subprocess and the official SDK client exercise discovery, strict schemas, argument validation, missing-key handling, toolset selection, reflected-secret redaction, and output budgets. No API key, network access, or captured production data is involved. See [AGENTS.md](AGENTS.md) for contribution rules and commit conventions.
+
+### Optional live validation
+
+With `NEBULA_API_KEY` already supplied securely in your environment, run:
+
+```bash
+npm run test:live
+```
+
+This explicitly contacts production through the official MCP stdio client, enables all 11 tools, and checks discovery, real lookups, filters, pagination, grade-count reconciliation, errors, credential non-disclosure and response budgets. It prints only check names, statuses, timings and aggregate counts—not credentials or response bodies. It is never run by `npm test`, `npm run check`, or CI. No key means exit code 2 without network requests; failed or skipped checks mean exit code 1.
+
+Defaults are CS 1337, a robotics club query, and today's America/Chicago date. Override with `NEBULA_LIVE_PREFIX`, `NEBULA_LIVE_COURSE`, `NEBULA_LIVE_CLUB_QUERY`, or `NEBULA_LIVE_DATE` (`YYYY-MM-DD`). Use a known indexed date if today's calendar is empty. The suite requires representative populated data, so upstream coverage changes can fail a check without establishing a server bug. It makes roughly 100 tool calls, including one deliberately invalid-key request; run it deliberately, not on a schedule. See [the validation record](docs/validation.md) for observed results and limitations.
 
 ## Data notes and limitations
 

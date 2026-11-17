@@ -21,7 +21,7 @@ Additional checks cover empty grade arrays on future sections, multi-byte budget
 
 Zod was upgraded to pinned `4.6.7` to address the dependency advisory found during review. The runtime dependency audit reports zero known vulnerabilities at validation time.
 
-## Executed checks
+## Initial offline checks
 
 - Host: Node `26.10.0`, `npm run check`.
 - Clean ephemeral container: Node `22.23.5`, `npm ci --ignore-scripts`, `npm run check`, runtime dependency audit.
@@ -29,4 +29,24 @@ Zod was upgraded to pinned `4.6.7` to address the dependency advisory found duri
 - **109 tests passed on each runtime**, with zero failures or cancelled tests.
 - Stdio subprocess and official MCP SDK in-memory client integration tests are included.
 
-Fixtures are synthetic. No authenticated production requests were executed and no real API key was supplied. Production permissions, dataset coverage, freshness and exact catalog-year values remain live-smoke-test limitations, not implied by the offline suite. Client registration and registry publication are deliberately outside this build.
+These initial fixtures were synthetic; no authenticated production requests or real API key were involved in that phase. Client registration and registry publication remain deliberately outside this build.
+
+## Authenticated production validation — 2026-11-17 (America/Chicago)
+
+Opt-in live testing used a securely supplied API key and the official MCP SDK client over a real stdio subprocess. All 11 tools, including opt-in events, returned real data. No credentials or authenticated response dumps were saved in this repository; the reusable suite emits only sanitized status/timing/count summaries.
+
+Live testing found three issues, fixed in separate commits with synthetic regression tests:
+
+| Finding | Fix |
+| --- | --- |
+| Room-specific calendar responses omit the parent building, causing legitimate location-filtered events to disappear | Preserve requested building/room context when omitted upstream |
+| The production API gateway rejects invalid keys with HTTP 400 rather than 401/403 | Recognize only its structured invalid-key diagnostic as `AUTH_REJECTED`; generic/malformed 400s remain upstream errors; keep bounded body handling |
+| An unchanged valid `/combined/sections/trends` query alternated between empty and populated results (including a direct upstream reproduction) | Avoid that index: fetch course Trends once and apply exact instructor matching locally; disclose the route choice in metadata |
+
+After those fixes, the default CS 1337 live run passed **62 checks, zero failed/skipped**, covering **95 tool calls** and **81 upstream attempts reported by successful calls**. The largest complete MCP result in that run was **7,426 UTF-8 bytes**, below the 12,000-byte ceiling. A second full run with MATH 2413 as the primary course also passed all 62 checks with 95 calls and 81 reported upstream attempts; its largest response was **7,543 bytes**. Both runs included five repeated combined-section requests with consistent nonempty results after the route change.
+
+Coverage includes every advertised tool, current and explicit calendar lookup, discovered-ID detail lookups, populated and genuinely empty searches, course catalog/school/class-level filters, professor/course/combined section scopes, term normalization, continuation and changed-filter rejection, all grade-target/filter families and grouping modes, fourteen-bucket totals and section-type reconciliation, club search/get/wildcard/no-match behavior, date/building/room/text event filters, maximum list limits, not-found and invalid-argument cases, and deliberately invalid credentials. Representative course checks cover CS 1336, 1337, 2336, 3345, MATH 2413 and PHYS 2325.
+
+The post-fix offline suite passes **114 tests on each of Node 22.23.5, 24.22.3 and host 26.10.0**, with zero failures/cancellations. Clean Node 22/24 containers performed `npm ci --ignore-scripts`, `npm run check` and runtime dependency audits; both audits, and the host runtime audit, found zero vulnerabilities. The script's missing-key guard was also verified to exit 2 without starting the MCP client. Reproduce the opt-in run with `npm run test:live`; environment overrides are documented in the README. Neither normal tests nor CI use a key or contact production.
+
+This verifies the exercised behavior and that the supplied key could access those routes at that time. It does not guarantee future availability, production-wide permissions, catalog coverage or freshness, absence of upstream paging drift, or correctness for every possible input/data combination. Trends and calendars remain upstream indexes, not current registration authorities.
