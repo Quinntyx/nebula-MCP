@@ -70,6 +70,37 @@ test('maps 401/403 to AUTH_REJECTED without retrying or echoing the key', async 
   assert.ok(!JSON.stringify(error.toEnvelope()).includes(KEY));
 });
 
+test('recognizes the production gateway invalid-key HTTP 400 without echoing its body', async () => {
+  const { client, fake } = makeClient(async () => jsonResponse({
+    code: 400,
+    message: 'INVALID_ARGUMENT: API key not valid. Please pass a valid API key.',
+  }, { httpStatus: 400 }));
+  const error = await expectCode(client.get('/course'), 'AUTH_REJECTED');
+  assert.equal(error.upstreamStatus, 400);
+  assert.equal(fake.calls.length, 1);
+  assert.equal(JSON.stringify(error.toEnvelope()).includes('INVALID_ARGUMENT:'), false);
+});
+
+test('ordinary or malformed HTTP 400 bodies are not classified as authentication errors', async () => {
+  for (const body of [
+    { code: 400, message: 'Invalid query parameters' },
+    { code: 123, message: 'INVALID_ARGUMENT: API key not valid. Please pass a valid API key.' },
+    { code: 400, message: `${KEY}: internal error` },
+    'invalid gateway JSON',
+  ]) {
+    const { client, fake } = makeClient(async () => jsonResponse(body, { httpStatus: 400 }));
+    const error = await expectCode(client.get('/course'), 'UPSTREAM_ERROR');
+    assert.equal(error.upstreamStatus, 400);
+    assert.equal(fake.calls.length, 1);
+    assert.equal(JSON.stringify(error.toEnvelope()).includes(KEY), false);
+  }
+});
+
+test('HTTP 400 authentication-error bodies still obey streaming byte limits', async () => {
+  const { client } = makeClient(async () => streamingResponse(['x'.repeat(1000)], { httpStatus: 400 }), { maxResponseBytes: 128 });
+  await expectCode(client.get('/course'), 'RESPONSE_TOO_LARGE');
+});
+
 test('maps 404 to NOT_FOUND', async () => {
   const { client } = makeClient(async () => emptyResponse(404));
   await expectCode(client.get('/course'), 'NOT_FOUND');

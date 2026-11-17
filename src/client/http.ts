@@ -238,6 +238,15 @@ export class NebulaClient {
         throw new ToolError(error.code, error.message, { retryable: true, upstreamStatus: status });
       }
 
+      if (status === 400) {
+        // The production gateway uses HTTP 400 for invalid keys. Recognize only
+        // its exact structured authentication diagnostic; ordinary request 400s
+        // must not be misreported as credential failures or echoed to clients.
+        const text = await this.#readBounded(response, budget);
+        if (isInvalidKeyGatewayResponse(text)) throw authRejected(status);
+        throw mapStatus(status);
+      }
+
       if (status < 200 || status >= 300) {
         await cancelBody(response);
         throw mapStatus(status);
@@ -334,13 +343,27 @@ function responseTooLarge(maxBytes: number): ToolError {
   );
 }
 
-function mapStatus(status: number): ToolError {
-  if (status === 401 || status === 403) {
-    return new ToolError('AUTH_REJECTED', 'The Nebula API rejected the configured API key.', {
-      upstreamStatus: status,
-      hint: 'Check that NEBULA_API_KEY is current and authorized for the public Nebula API.',
-    });
+function isInvalidKeyGatewayResponse(text: string): boolean {
+  try {
+    const body: unknown = JSON.parse(text);
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) return false;
+    const error = body as Record<string, unknown>;
+    return error['code'] === 400 && typeof error['message'] === 'string' &&
+      /^(?:INVALID_ARGUMENT:\s*)?API key not valid\. Please pass a valid API key\.\s*$/i.test(error['message']);
+  } catch {
+    return false;
   }
+}
+
+function authRejected(status: number): ToolError {
+  return new ToolError('AUTH_REJECTED', 'The Nebula API rejected the configured API key.', {
+    upstreamStatus: status,
+    hint: 'Check that NEBULA_API_KEY is current and authorized for the public Nebula API.',
+  });
+}
+
+function mapStatus(status: number): ToolError {
+  if (status === 401 || status === 403) return authRejected(status);
   if (status === 404) {
     return new ToolError('NOT_FOUND', 'The Nebula API has no record matching this request.', {
       upstreamStatus: status,
