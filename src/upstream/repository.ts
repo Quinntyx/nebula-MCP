@@ -36,6 +36,8 @@ export interface CourseSearchFilters {
   course_number?: string | undefined;
   title?: string | undefined;
   catalog_year?: string | undefined;
+  school?: string | undefined;
+  class_level?: string | undefined;
 }
 
 export interface ProfessorSearchFilters {

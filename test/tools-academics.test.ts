@@ -34,6 +34,31 @@ test('course_search sends one exact-filter request and never a limit', async () 
   assert.equal(run.payload.meta!['fetched_at'], '2026-11-16T12:00:00.000Z');
 });
 
+test('course_search forwards optional catalog filters exactly', async () => {
+  const upstream = fakeFetch(async () => envelope([course()]));
+  const run = await invoke(
+    courseSearchTool,
+    {
+      subject_prefix: 'CS',
+      course_number: '1336',
+      catalog_year: '2026-2027 Catalog',
+      school: 'Erik Jonsson School of Engineering and Computer Science',
+      class_level: 'Undergraduate',
+    },
+    upstream.fetch,
+  );
+
+  const url = new URL(upstream.calls[0]!.url);
+  assert.equal(url.searchParams.get('catalog_year'), '2026-2027 Catalog');
+  assert.equal(url.searchParams.get('school'), 'Erik Jonsson School of Engineering and Computer Science');
+  assert.equal(url.searchParams.get('class_level'), 'Undergraduate');
+  assert.equal(run.payload.ok, true);
+
+  const rejected = await invoke(courseSearchTool, { subject_prefix: 'CS', school: 'x'.repeat(61) }, upstream.fetch);
+  assert.equal(rejected.payload.code, 'INVALID_ARGUMENT');
+  assert.equal(upstream.calls.length, 1);
+});
+
 test('course_search pages with an opaque cursor that rebinds the exact filter', async () => {
   const upstream = fakeFetch(async () => envelope([course(), course({ _id: ID_B })]));
   const first = await invoke(courseSearchTool, { subject_prefix: 'CS', limit: 1 }, upstream.fetch);

@@ -3,6 +3,7 @@ import { invalidArgument } from '../errors.js';
 import { fitList } from '../domain/budget.js';
 import { decodeCursor, encodeCursor, filterFingerprint } from '../domain/cursor.js';
 import { normalizePrefix, normalizeText, parseArgs } from './args.js';
+import type { CourseSearchFilters } from '../upstream/repository.js';
 import { courseSummaryRow } from './mappers.js';
 import { success } from './result.js';
 import { READ_ONLY_ANNOTATIONS, type ToolDefinition } from './types.js';
@@ -15,6 +16,9 @@ const PREFIX_RE = /^[A-Z0-9 &-]{1,8}$/;
 const shape = {
   subject_prefix: z.string().min(1).max(8),
   course_number: z.string().min(1).max(12).optional(),
+  catalog_year: z.string().min(1).max(24).optional(),
+  school: z.string().min(1).max(60).optional(),
+  class_level: z.string().min(1).max(40).optional(),
   limit: z.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT),
   cursor: z.string().min(1).max(512).optional(),
 };
@@ -39,7 +43,12 @@ export const courseSearchTool: ToolDefinition = {
       throw invalidArgument('subject_prefix must be a short alphanumeric subject code such as CS', 'Remove punctuation or wildcards.');
     }
     const courseNumber = args.course_number === undefined ? undefined : normalizeText(args.course_number);
-    const filters = courseNumber === undefined ? { subject_prefix: prefix } : { subject_prefix: prefix, course_number: courseNumber };
+    const filters: CourseSearchFilters = { subject_prefix: prefix };
+    if (courseNumber !== undefined) filters.course_number = courseNumber;
+    for (const key of ['catalog_year', 'school', 'class_level'] as const) {
+      const value = args[key];
+      if (value !== undefined) filters[key] = normalizeText(value);
+    }
     const fingerprint = filterFingerprint(filters);
     const offset = args.cursor === undefined ? 0 : decodeCursor(args.cursor, TOOL, fingerprint);
 
@@ -63,7 +72,7 @@ export const courseSearchTool: ToolDefinition = {
 
     const notes = [
       'Results come from the current upstream catalog index, not a live course-catalog lookup.',
-      'course_number is matched exactly; omit it to list every course for the prefix.',
+      'Extra filters (course_number, catalog_year, school, class_level) are matched exactly; they are not fuzzy or auto-corrected.',
     ];
     if (fitted.has_more === null) {
       notes.push('has_more is null because the page was non-empty and the API does not report totals; a follow-up cursor returns the next page.');
