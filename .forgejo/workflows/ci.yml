@@ -1,0 +1,21 @@
+name: CI
+
+# Mirrors .github/workflows/ci.yml for the Forgejo origin. Keep both in sync.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: docker
+    container:
+      image: node:22-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npm run check
+      - name: verify the built entry point starts without stdout noise
+        run: |
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' | node dist/src/index.js 2>/dev/null | head -1 | grep -q '"serverInfo"'

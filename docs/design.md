@@ -75,3 +75,13 @@ Use a 10-second per-attempt timeout and propagate MCP cancellation; bound total 
 Use minimal pinned runtime dependencies plus a committed lockfile; Node >=22. Standard scripts: build, typecheck, test, check. No registry publish or client registration. Document build/run and key environment variable, toolset selection, limitations and examples without real credentials/user-specific paths. CI validates on GitHub and Forgejo where practical using npm ci and offline checks, no key.
 
 Tests: every tool's route/mapping and invalid inputs; strict schemas; unknown toolset rejection; periods/summer sorting; changed-filter cursors, malformed/oversized cursors; arbitrary upstream page sizes and terminal empty page; local paging; hard UTF-8 output cap with correct continuation; schema envelope/null data behavior; error mappings and redaction; redirect/URL confinement; size limits, timeout, cancellation, retry bounds; 14 bucket validation and historical semantics; club wildcard/404; optional event flattening and academic-calendar fixture; stdio initialize/list/call and stdout cleanliness using official SDK. All fixtures synthetic. Optional live smoke script must require NEBULA_API_KEY and never print or save key/response bodies. Live smoke is not required to build or run offline tests.
+
+## Implementation notes (v0.1)
+
+Where the contract left room or the SDK forced a choice, the implementation decided as follows:
+
+- **Published schemas are lenient, validation is strict.** MCP tool `inputSchema` objects list every property but allow additional keys, because the SDK parses arguments before the handler runs. Each handler then validates against a `.strict()` schema and returns the bounded `INVALID_ARGUMENT` envelope, so extra properties are still rejected without surfacing protocol-level parse errors.
+- **`course_search` accepts `catalog_year`, `school`, and `class_level`.** The table above lists them as optional; the upstream `/course` route exposes them as queryable exact fields, so they are forwarded verbatim and folded into the cursor fingerprint.
+- **`meta.requests` counts upstream responses consumed by the call.** A request that fails is not counted, because the failing call's own count is discarded with the error.
+- **Grade id scopes are `by=overall` only.** Per-term aggregates require filter fields (`subject_prefix` + `course_number`, `first_name` + `last_name`), matching the upstream `/grades/semester*` routes, which are filter-keyed.
+- **Two CI files.** `.github/workflows/ci.yml` and `.forgejo/workflows/ci.yml` run the same `npm ci` + `npm run check` ladder; both must stay in sync.
