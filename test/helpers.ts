@@ -23,9 +23,11 @@ export function fakeFetch(handler: (url: string, init: Parameters<FetchLike>[1])
 }
 
 export interface EnvelopeOptions {
-  status?: number;
+  status?: number | string;
   message?: string;
   headers?: Record<string, string>;
+  /** HTTP transport status; defaults to 200. */
+  httpStatus?: number;
 }
 
 /** A successful Nebula envelope response. */
@@ -33,7 +35,7 @@ export function envelope(data: unknown, options: EnvelopeOptions = {}): FetchRes
   return jsonResponse({ status: options.status ?? 200, message: options.message ?? 'success', data }, options);
 }
 
-export function jsonResponse(body: unknown, options: EnvelopeOptions & { httpStatus?: number } = {}): FetchResponseLike {
+export function jsonResponse(body: unknown, options: EnvelopeOptions = {}): FetchResponseLike {
   const text = typeof body === 'string' ? body : JSON.stringify(body);
   const response = new Response(text, {
     status: options.httpStatus ?? 200,

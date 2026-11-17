@@ -33,7 +33,7 @@ export type FetchLike = (
 
 export interface NebulaClientOptions {
   apiKey: string | undefined;
-  fetch?: FetchLike;
+  fetch?: FetchLike | undefined;
   /** Per-attempt ceiling. Default 10s. */
   attemptTimeoutMs?: number;
   /** Whole-call ceiling across attempts. Default 20s. */
@@ -166,7 +166,7 @@ export class NebulaClient {
    * envelope. The key is only sent in the `x-api-key` header, redirects are not
    * followed, and only one retry is attempted for 429/502/503/504.
    */
-  async get(path: string, query?: Record<string, string>, options: { signal?: AbortSignal } = {}): Promise<GetResult> {
+  async get(path: string, query?: Record<string, string>, options: { signal?: AbortSignal | undefined } = {}): Promise<GetResult> {
     // A missing key must not touch the network at all.
     if (this.#apiKey === undefined) {
       throw new ToolError('AUTH_MISSING', 'NEBULA_API_KEY is not configured, so Nebula API calls are unavailable.', {
